@@ -10,6 +10,7 @@ import { FileOperations } from '../vault/file-operations.js';
 import { serializeFrontmatter } from '../vault/frontmatter.js';
 import { computeHash } from '../database/index.js';
 import { generateCoherenceId, CanonicalFrontmatter } from '../vault/frontmatter-schema.js';
+import { lintMarkdown } from '../linter/engine.js';
 
 /**
  * Conversation message
@@ -39,6 +40,7 @@ export interface ProcessConversationInput extends ProvenanceFields {
   insightsPath?: string; // Path for insights (default: 'atomic/')
   strategy?: 'manual' | 'auto'; // Manual: just save conversation, Auto: extract insights
   tags?: string[];
+  autoLint?: boolean; // Apply linting to generated notes (default: false)
 }
 
 export interface ProcessConversationOutput {
@@ -216,10 +218,18 @@ export async function handleProcessConversation(
       stage: 'capture'
     };
 
-    const conversationContent = serializeFrontmatter(
+    let conversationContent = serializeFrontmatter(
       conversationFrontmatter as Record<string, any>,
       conversationBody
     );
+
+    // Apply autoLint if requested
+    if (args.autoLint) {
+      const lintResult = await lintMarkdown(conversationContent, { applyFixes: true });
+      if (lintResult.fixed) {
+        conversationContent = lintResult.content;
+      }
+    }
 
     // Write conversation note
     await fileOps.writeFile(conversationFilename, conversationContent);
@@ -285,10 +295,18 @@ Extracted from conversation: [[${conversationFilename}]]
 - Promote to evergreen if validated
 `;
 
-        const insightContent = serializeFrontmatter(
+        let insightContent = serializeFrontmatter(
           insightFrontmatter as Record<string, any>,
           insightBody
         );
+
+        // Apply autoLint if requested
+        if (args.autoLint) {
+          const lintResult = await lintMarkdown(insightContent, { applyFixes: true });
+          if (lintResult.fixed) {
+            insightContent = lintResult.content;
+          }
+        }
 
         // Write insight note
         await fileOps.writeFile(insightFilename, insightContent);

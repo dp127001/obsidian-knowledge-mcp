@@ -10,6 +10,7 @@ import { serializeFrontmatter, parseFrontmatter, extractMetadata } from '../vaul
 import { computeHash } from '../database/index.js';
 import { createNoteFromTemplate, TemplateOptions } from '../templates/template-manager.js';
 import { inferDefaultsFromPath, CanonicalFrontmatter } from '../vault/frontmatter-schema.js';
+import { lintMarkdown } from '../linter/engine.js';
 
 export interface CreateNoteInput extends ProvenanceFields {
   vault: string;
@@ -148,7 +149,15 @@ export async function handleCreateNote(
     }
 
     // Serialize content
-    const content = serializeFrontmatter(frontmatter, body);
+    let content = serializeFrontmatter(frontmatter, body);
+
+    // Apply autoLint if requested
+    if (args.autoLint) {
+      const lintResult = await lintMarkdown(content, { applyFixes: true });
+      if (lintResult.fixed) {
+        content = lintResult.content;
+      }
+    }
 
     // Check if file already exists
     const fileOps = new FileOperations(vault.path);

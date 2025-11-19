@@ -10,6 +10,7 @@ import { FileOperations } from '../vault/file-operations.js';
 import { parseFrontmatter, serializeFrontmatter } from '../vault/frontmatter.js';
 import { computeHash } from '../database/index.js';
 import { CanonicalFrontmatter, generateCoherenceId, DECISION_STATUSES } from '../vault/frontmatter-schema.js';
+import { lintMarkdown } from '../linter/engine.js';
 
 export interface DecisionLogInput extends ProvenanceFields {
   vault: string;
@@ -25,6 +26,7 @@ export interface DecisionLogInput extends ProvenanceFields {
   reviewDate?: string; // ISO date for review
   tags?: string[];
   updateExisting?: boolean; // If true, update existing decision
+  autoLint?: boolean; // Apply linting to generated note (default: false)
 }
 
 export interface DecisionLogOutput {
@@ -262,7 +264,16 @@ ${args.alternatives || 'What other options were considered?'}
     }
 
     // Serialize and write
-    const content = serializeFrontmatter(frontmatter as Record<string, any>, body);
+    let content = serializeFrontmatter(frontmatter as Record<string, any>, body);
+
+    // Apply autoLint if requested
+    if (args.autoLint) {
+      const lintResult = await lintMarkdown(content, { applyFixes: true });
+      if (lintResult.fixed) {
+        content = lintResult.content;
+      }
+    }
+
     await fileOps.writeFile(notePath, content);
 
     // Record provenance

@@ -10,6 +10,7 @@ import { FileOperations } from '../vault/file-operations.js';
 import { parseFrontmatter, serializeFrontmatter } from '../vault/frontmatter.js';
 import { computeHash } from '../database/index.js';
 import { CanonicalFrontmatter } from '../vault/frontmatter-schema.js';
+import { lintMarkdown } from '../linter/engine.js';
 
 export interface EvergreenNoteInput extends ProvenanceFields {
   vault: string;
@@ -19,6 +20,7 @@ export interface EvergreenNoteInput extends ProvenanceFields {
   body?: string; // Manual body content
   tags?: string[];
   updateExisting?: boolean; // If true, update existing note at path
+  autoLint?: boolean; // Apply linting to generated note (default: false)
 }
 
 export interface EvergreenNoteOutput {
@@ -227,7 +229,16 @@ ${synthesized.sources.map(s => `- [[${s}]]`).join('\n')}
     }
 
     // Serialize and write
-    const content = serializeFrontmatter(frontmatter as Record<string, any>, body);
+    let content = serializeFrontmatter(frontmatter as Record<string, any>, body);
+
+    // Apply autoLint if requested
+    if (args.autoLint) {
+      const lintResult = await lintMarkdown(content, { applyFixes: true });
+      if (lintResult.fixed) {
+        content = lintResult.content;
+      }
+    }
+
     await fileOps.writeFile(notePath, content);
 
     // Record provenance

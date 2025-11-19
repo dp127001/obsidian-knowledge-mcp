@@ -28,6 +28,8 @@ import { handleAnalyzeConnections } from './tools/analyze-connections.js';
 import { handleProcessConversation } from './tools/process-conversation.js';
 import { handleEvergreenNote } from './tools/evergreen-note.js';
 import { handleDecisionLog } from './tools/decision-log.js';
+import { handleLintNote } from './tools/lint-note.js';
+import { handleLintFolder } from './tools/lint-folder.js';
 
 /**
  * MCP Server context
@@ -343,6 +345,48 @@ export function createServer(context: ServerContext): Server {
         },
         required: ['vault', 'title']
       }
+    },
+    {
+      name: 'lint-note',
+      description: 'Lint a single note with optional automatic fixes',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          path: { type: 'string', description: 'Note path relative to vault root' },
+          applyFixes: { type: 'boolean', description: 'Apply automatic fixes (default: false)' },
+          lintSettings: {
+            type: 'object',
+            description: 'Linting configuration settings'
+          },
+          source: { type: 'string', description: 'Provenance source' },
+          actor: { type: 'string', enum: ['user', 'llm', 'system'], description: 'Actor' },
+          requestId: { type: 'string', description: 'Idempotency token (only used if applyFixes=true)' }
+        },
+        required: ['vault', 'path']
+      }
+    },
+    {
+      name: 'lint-folder',
+      description: 'Lint multiple notes in a folder with optional automatic fixes',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          folder: { type: 'string', description: 'Folder path (default: root)' },
+          recursive: { type: 'boolean', description: 'Lint subdirectories (default: true)' },
+          applyFixes: { type: 'boolean', description: 'Apply automatic fixes (default: false)' },
+          lintSettings: {
+            type: 'object',
+            description: 'Linting configuration settings'
+          },
+          limit: { type: 'number', description: 'Max files to lint (default: 100)' },
+          source: { type: 'string', description: 'Provenance source' },
+          actor: { type: 'string', enum: ['user', 'llm', 'system'], description: 'Actor' },
+          requestId: { type: 'string', description: 'Idempotency token' }
+        },
+        required: ['vault']
+      }
     }
   ];
 
@@ -409,6 +453,14 @@ export function createServer(context: ServerContext): Server {
 
         case 'decision-log':
           result = await handleDecisionLog(context, (args || {}) as any);
+          break;
+
+        case 'lint-note':
+          result = await handleLintNote(context, (args || {}) as any);
+          break;
+
+        case 'lint-folder':
+          result = await handleLintFolder(context, (args || {}) as any);
           break;
 
         default:
