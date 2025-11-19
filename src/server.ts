@@ -30,6 +30,11 @@ import { handleEvergreenNote } from './tools/evergreen-note.js';
 import { handleDecisionLog } from './tools/decision-log.js';
 import { handleLintNote } from './tools/lint-note.js';
 import { handleLintFolder } from './tools/lint-folder.js';
+import { handleVaultHealthEnhanced } from './tools/vault-health-enhanced.js';
+import { handleGetServerStatus } from './tools/get-server-status.js';
+import { handleIndexStatus } from './tools/index-status.js';
+import { handleRebuildIndex } from './tools/rebuild-index.js';
+import { handleVerifyDatabase } from './tools/verify-database.js';
 
 /**
  * MCP Server context
@@ -387,6 +392,62 @@ export function createServer(context: ServerContext): Server {
         },
         required: ['vault']
       }
+    },
+    {
+      name: 'vault-health-enhanced',
+      description: 'Get comprehensive health metrics for a vault including type counts, orphans, backlinks, evergreen metrics, decision metrics, and optional lint hygiene sampling',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          sampleLintHygiene: { type: 'boolean', description: 'Sample notes for lint issues (default: false)' },
+          lintSampleSize: { type: 'number', description: 'Number of notes to sample for linting (default: 20)' }
+        },
+        required: ['vault']
+      }
+    },
+    {
+      name: 'get-server-status',
+      description: 'Get server snapshot including version, vaults, database status, and system information',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          includeSystemInfo: { type: 'boolean', description: 'Include OS/system details (default: true)' }
+        }
+      }
+    },
+    {
+      name: 'index-status',
+      description: 'Check search index status for a vault',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' }
+        },
+        required: ['vault']
+      }
+    },
+    {
+      name: 'rebuild-index',
+      description: 'Force rebuild of search index for a vault',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' }
+        },
+        required: ['vault']
+      }
+    },
+    {
+      name: 'verify-database',
+      description: 'Verify database integrity and check for issues',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          checkIntegrity: { type: 'boolean', description: 'Run SQLite integrity check (default: true)' },
+          checkOrphans: { type: 'boolean', description: 'Check for orphaned entries (default: true)' }
+        }
+      }
     }
   ];
 
@@ -461,6 +522,26 @@ export function createServer(context: ServerContext): Server {
 
         case 'lint-folder':
           result = await handleLintFolder(context, (args || {}) as any);
+          break;
+
+        case 'vault-health-enhanced':
+          result = await handleVaultHealthEnhanced(context, (args || {}) as any);
+          break;
+
+        case 'get-server-status':
+          result = await handleGetServerStatus(context, (args || {}) as any);
+          break;
+
+        case 'index-status':
+          result = await handleIndexStatus(context, (args || {}) as any);
+          break;
+
+        case 'rebuild-index':
+          result = await handleRebuildIndex(context, (args || {}) as any);
+          break;
+
+        case 'verify-database':
+          result = await handleVerifyDatabase(context, (args || {}) as any);
           break;
 
         default:

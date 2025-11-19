@@ -231,7 +231,7 @@ export interface VaultConfig {
   /** Whether vault is enabled */
   enabled: boolean;
   /** Vault classification for policy enforcement */
-  classification?: 'personal' | 'work';
+  classification?: 'work' | 'personal' | 'archive' | 'shared';
 }
 
 // ============================================================================

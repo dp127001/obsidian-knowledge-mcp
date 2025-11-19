@@ -14,7 +14,7 @@ export interface ListVaultsOutput {
     indexedFileCount: number;
     lastIndexedAt?: string;
     needsRebuild: boolean;
-    classification?: 'personal' | 'work';
+    classification?: 'work' | 'personal' | 'archive' | 'shared';
   }>;
   totalVaults: number;
 }

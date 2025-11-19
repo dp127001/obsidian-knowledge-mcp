@@ -148,6 +148,16 @@ export class KnowledgeDatabase {
     return !!row;
   }
 
+  /**
+   * Get list of database tables
+   */
+  getTables(): string[] {
+    const rows = this.db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+      .all() as { name: string }[];
+    return rows.map(r => r.name);
+  }
+
   // ========================================================================
   // File Index
   // ========================================================================

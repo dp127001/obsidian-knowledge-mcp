@@ -14,6 +14,10 @@ export interface ServerConfig {
   vaults: VaultConfig[];
   /** Database file path (absolute or relative to config) */
   databasePath: string;
+  /** Database configuration (alternative to databasePath) */
+  database?: {
+    path: string;
+  };
   /** Server version */
   version: string;
   /** Server start timestamp */
