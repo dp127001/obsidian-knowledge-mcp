@@ -18,6 +18,13 @@ import { ToolResponse } from './types/core.js';
 import { handleListVaults } from './tools/list-vaults.js';
 import { handleReadNote } from './tools/read-note.js';
 import { handleCreateNote } from './tools/create-note.js';
+import { handleSearchVault } from './tools/search-vault.js';
+import { handleFuzzySearch } from './tools/fuzzy-search.js';
+import { handleListFilesInVault } from './tools/list-files-in-vault.js';
+import { handleFindBrokenLinks } from './tools/find-broken-links.js';
+import { handleExtractConcepts } from './tools/extract-concepts.js';
+import { handleAnalyzeTags } from './tools/analyze-tags.js';
+import { handleAnalyzeConnections } from './tools/analyze-connections.js';
 
 /**
  * MCP Server context
@@ -122,6 +129,117 @@ export function createServer(context: ServerContext): Server {
         },
         required: ['vault', 'path']
       }
+    },
+    {
+      name: 'search-vault',
+      description: 'Search for notes in a vault using hybrid exact and fuzzy matching',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          query: { type: 'string', description: 'Search query' },
+          searchIn: {
+            type: 'array',
+            items: { type: 'string', enum: ['content', 'frontmatter', 'tags', 'filename'] },
+            description: 'Where to search (default: content)'
+          },
+          limit: { type: 'number', description: 'Max results (default: 20)' },
+          offset: { type: 'number', description: 'Results offset (default: 0)' }
+        },
+        required: ['vault', 'query']
+      }
+    },
+    {
+      name: 'fuzzy-search',
+      description: 'Fuzzy search for notes using approximate string matching',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          query: { type: 'string', description: 'Search query' },
+          searchIn: {
+            type: 'array',
+            items: { type: 'string', enum: ['content', 'frontmatter', 'tags', 'filename'] },
+            description: 'Where to search'
+          },
+          limit: { type: 'number', description: 'Max results' },
+          offset: { type: 'number', description: 'Results offset' },
+          fuzzyThreshold: { type: 'number', description: 'Minimum score threshold (0-1)' }
+        },
+        required: ['vault', 'query']
+      }
+    },
+    {
+      name: 'list-files-in-vault',
+      description: 'List files in a vault with optional fuzzy filtering',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          includeMetadata: { type: 'boolean', description: 'Include file metadata' },
+          notesOnly: { type: 'boolean', description: 'Only markdown files (default: true)' },
+          filterQuery: { type: 'string', description: 'Fuzzy filter query' }
+        },
+        required: ['vault']
+      }
+    },
+    {
+      name: 'find-broken-links',
+      description: 'Find broken wikilinks in vault with suggestions for fixes',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          limit: { type: 'number', description: 'Max broken links to return' },
+          offset: { type: 'number', description: 'Results offset' }
+        },
+        required: ['vault']
+      }
+    },
+    {
+      name: 'extract-concepts',
+      description: 'Extract and rank concepts from notes in a vault',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          paths: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional: specific note paths to analyze'
+          }
+        },
+        required: ['vault']
+      }
+    },
+    {
+      name: 'analyze-tags',
+      description: 'Analyze tag usage across vault with frequency statistics',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          minCount: { type: 'number', description: 'Minimum tag count to include' }
+        },
+        required: ['vault']
+      }
+    },
+    {
+      name: 'analyze-connections',
+      description: 'Suggest connections between notes based on similarity',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          paths: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional: specific notes to analyze'
+          },
+          limitSuggestions: { type: 'number', description: 'Max suggestions per note' }
+        },
+        required: ['vault']
+      }
     }
   ];
 
@@ -148,6 +266,34 @@ export function createServer(context: ServerContext): Server {
 
         case 'create-note':
           result = await handleCreateNote(context, (args || {}) as any);
+          break;
+
+        case 'search-vault':
+          result = await handleSearchVault(context, (args || {}) as any);
+          break;
+
+        case 'fuzzy-search':
+          result = await handleFuzzySearch(context, (args || {}) as any);
+          break;
+
+        case 'list-files-in-vault':
+          result = await handleListFilesInVault(context, (args || {}) as any);
+          break;
+
+        case 'find-broken-links':
+          result = await handleFindBrokenLinks(context, (args || {}) as any);
+          break;
+
+        case 'extract-concepts':
+          result = await handleExtractConcepts(context, (args || {}) as any);
+          break;
+
+        case 'analyze-tags':
+          result = await handleAnalyzeTags(context, (args || {}) as any);
+          break;
+
+        case 'analyze-connections':
+          result = await handleAnalyzeConnections(context, (args || {}) as any);
           break;
 
         default:
