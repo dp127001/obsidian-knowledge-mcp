@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "obsidian-knowledge": {
+      "command": "node",
+      "args": [
+        "/path/to/obsidian-knowledge-mcp/build/index.js"
+      ],
+      "env": {
+        "VAULT_PATHS": "/path/to/your/obsidian/vault",
+        "VAULT_NAMES": "My Vault",
+        "VAULT_IDS": "main",
+        "DATABASE_PATH": "/path/to/obsidian-knowledge-mcp.db",
+        "LOG_LEVEL": "info"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/mcp-config.json",
+  "mcpServers": {
+    "obsidian-knowledge": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/obsidian-knowledge-mcp/build/index.js"
+      ],
+      "env": {
+        "VAULT_PATHS": "/Users/you/Documents/ObsidianVault,/Users/you/Documents/WorkVault",
+        "VAULT_NAMES": "Personal,Work",
+        "VAULT_IDS": "personal,work",
+        "DATABASE_PATH": "/Users/you/.obsidian-knowledge/knowledge.db",
+        "LOG_LEVEL": "info"
+      }
+    },
+    "obsidian-knowledge-with-config": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/obsidian-knowledge-mcp/build/index.js"
+      ],
+      "env": {
+        "CONFIG_PATH": "/absolute/path/to/mcp-config.json"
+      }
+    }
+  }
+}

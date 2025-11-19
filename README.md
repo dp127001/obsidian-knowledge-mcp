@@ -1,47 +1,97 @@
 # Obsidian Knowledge MCP Server
 
-A Model Context Protocol (MCP) server that provides AI assistants with access to Obsidian knowledge bases. This server enables reading, searching, and managing markdown notes with provenance tracking, knowledge workflows, and advanced search capabilities.
+A Model Context Protocol (MCP) server that provides AI assistants with structured access to Obsidian knowledge bases, featuring advanced search, provenance tracking, and knowledge workflow automation.
 
 ## Features
 
-- **Multi-vault support**: Access multiple Obsidian vaults simultaneously
-- **Provenance tracking**: SQLite-backed history of all note operations
-- **Knowledge workflows**: Process conversations into atomic notes, evergreen synthesis, and decision logs
-- **Advanced search**: Hybrid search using exact matching and fuzzy algorithms
-- **Frontmatter parsing**: Full support for YAML frontmatter and Obsidian conventions
-- **Type safety**: Complete TypeScript implementation with strict typing
+### Core Capabilities
+- **Multi-Vault Access**: Manage multiple Obsidian vaults with classification-based policies
+- **Provenance Tracking**: Complete audit trail of all note operations with SHA-256 content verification
+- **Advanced Search**: Three search algorithms (Regex+, uFuzzy, fuzzysort) for different use cases
+- **Knowledge Workflows**: Conversation processing, evergreen note management, decision logging
+- **Markdown Linting**: Obsidian-specific rules with auto-fixing capabilities
+- **Health Metrics**: Comprehensive vault analytics and diagnostics
+
+### Search & Discovery
+- **search-vault**: Regex-based exact search with highlighting
+- **fuzzy-search**: Typo-tolerant fuzzy search with configurable algorithms
+- **find-broken-links**: Detect wikilinks pointing to non-existent notes
+- **analyze-connections**: Graph analysis of note relationships
+- **analyze-tags**: Tag usage statistics and hierarchy
+
+### Knowledge Management
+- **process-conversation**: Convert conversations into atomic notes and archives
+- **evergreen-note**: Create/update evergreen notes with lifecycle tracking
+- **decision-log**: Document decisions in ADR format
+- **extract-concepts**: Extract and link concepts across notes
+
+### Quality & Maintenance
+- **lint-note**: Lint individual notes with Obsidian-specific rules
+- **lint-folder**: Batch lint multiple notes
+- **vault-health-enhanced**: Comprehensive health metrics (orphans, staleness, backlinks)
+- **verify-database**: Database integrity checks
+- **rebuild-index**: Force rebuild search index
 
 ## Installation
 
+### Prerequisites
+- Node.js >= 18.0.0
+- An Obsidian vault (or multiple vaults)
+
+### Install from Source
+
 ```bash
+# Clone the repository
+git clone https://github.com/yourusername/obsidian-knowledge-mcp.git
+cd obsidian-knowledge-mcp
+
+# Install dependencies
 npm install
+
+# Build TypeScript
 npm run build
+
+# Optional: Link globally for CLI usage
+npm link
+```
+
+### Verify Installation
+
+```bash
+obsidian-knowledge-mcp --version
+# Output: obsidian-knowledge-mcp v0.1.0
+
+obsidian-knowledge-mcp --help
+# Shows usage information
 ```
 
 ## Configuration
 
-### Environment Variables
+The server supports two configuration methods: environment variables or a JSON config file.
+
+### Option 1: Environment Variables
 
 ```bash
-# Comma-separated vault paths
-export VAULT_PATHS="/path/to/vault1,/path/to/vault2"
-
-# Optional: Comma-separated vault names
-export VAULT_NAMES="Personal,Work"
-
-# Optional: Comma-separated vault IDs
-export VAULT_IDS="personal,work"
-
-# Optional: Database path (defaults to ./obsidian-knowledge-mcp.db)
-export DATABASE_PATH="/path/to/database.db"
-
-# Optional: Log level
+export VAULT_PATHS="/Users/you/Documents/ObsidianVault"
+export VAULT_NAMES="My Vault"
+export VAULT_IDS="main"
+export DATABASE_PATH="/Users/you/.obsidian-knowledge/knowledge.db"
 export LOG_LEVEL="info"
+
+obsidian-knowledge-mcp
 ```
 
-### Configuration File
+**Multiple Vaults:**
 
-Alternatively, create `mcp-config.json`:
+```bash
+export VAULT_PATHS="/path/to/vault1,/path/to/vault2"
+export VAULT_NAMES="Personal,Work"
+export VAULT_IDS="personal,work"
+```
+
+### Option 2: Config File
+
+Create `mcp-config.json`:
 
 ```json
 {
@@ -49,156 +99,253 @@ Alternatively, create `mcp-config.json`:
     {
       "id": "personal",
       "name": "Personal Knowledge Base",
-      "path": "/path/to/personal-vault",
+      "path": "/Users/you/Documents/PersonalVault",
       "enabled": true,
       "classification": "personal"
     },
     {
       "id": "work",
-      "name": "Work Vault",
-      "path": "/path/to/work-vault",
+      "name": "Work Notes",
+      "path": "/Users/you/Documents/WorkVault",
       "enabled": true,
       "classification": "work"
     }
   ],
-  "databasePath": "./knowledge.db",
+  "databasePath": "/Users/you/.obsidian-knowledge/knowledge.db",
   "logging": {
-    "level": "info"
+    "level": "info",
+    "file": "/Users/you/.obsidian-knowledge/server.log"
+  },
+  "search": {
+    "fuzzyThreshold": 0.5
+  },
+  "linter": {
+    "autoLintDefault": false
   }
 }
 ```
 
-## Usage
-
-### Standalone
+Then run:
 
 ```bash
-# Run the server
-npm run build
-node build/index.js
+CONFIG_PATH=./mcp-config.json obsidian-knowledge-mcp
 ```
 
-### With Claude Desktop
+## Integration with AI Assistants
 
-Add to your Claude Desktop MCP configuration (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+### Claude Desktop
+
+1. Locate your Claude Desktop config file:
+   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+   - Linux: `~/.config/Claude/claude_desktop_config.json`
+
+2. Add the MCP server configuration:
 
 ```json
 {
   "mcpServers": {
     "obsidian-knowledge": {
       "command": "node",
-      "args": ["/path/to/obsidian-knowledge-mcp/build/index.js"],
+      "args": [
+        "/absolute/path/to/obsidian-knowledge-mcp/build/index.js"
+      ],
       "env": {
-        "VAULT_PATHS": "/path/to/your/vault",
-        "VAULT_NAMES": "My Vault"
+        "VAULT_PATHS": "/Users/you/Documents/ObsidianVault",
+        "VAULT_NAMES": "My Vault",
+        "VAULT_IDS": "main",
+        "DATABASE_PATH": "/Users/you/.obsidian-knowledge/knowledge.db",
+        "LOG_LEVEL": "info"
       }
     }
   }
 }
 ```
 
-### With MCP Inspector
+3. Restart Claude Desktop
+
+4. Verify the server appears in the MCP section
+
+### ChatGPT (with MCP Support)
+
+Create or update `chatgpt.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "obsidian-knowledge": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/obsidian-knowledge-mcp/build/index.js"
+      ],
+      "env": {
+        "CONFIG_PATH": "/path/to/mcp-config.json"
+      }
+    }
+  }
+}
+```
+
+### Using MCP Inspector for Testing
 
 ```bash
 npx @modelcontextprotocol/inspector node build/index.js
 ```
 
-## Available Tools
+Set environment variables in the inspector UI or use the config file approach.
 
-### Core Tools
+## Available Tools (20 Total)
 
-- **`list-vaults`**: List all configured vaults with metadata
-- **`read-note`**: Read a specific note with frontmatter parsing
-- **`create-note`**: Create a new note with provenance tracking
+### Vault & File Operations (3)
+1. **list-vaults**: List all configured vaults
+2. **read-note**: Read a specific note
+3. **create-note**: Create a new note with provenance
 
-### Planned Tools (see CLAUDE.md for full spec)
+### Search & Discovery (5)
+4. **search-vault**: Regex-based exact search
+5. **fuzzy-search**: Fuzzy search with multiple algorithms
+6. **list-files-in-vault**: List files/folders
+7. **find-broken-links**: Find broken wikilinks
+8. **analyze-connections**: Graph analysis
 
-- **Search & Discovery**: `search-vault`, `fuzzy-search`, `find-similar-notes`, `find-broken-links`
-- **Knowledge Workflows**: `process-conversation`, `evergreen-note`, `decision-log`
-- **Health & Admin**: `vault-health-enhanced`, `get-server-status`
-- **And 30+ more tools** (see full specification in CLAUDE.md)
+### Analysis (3)
+9. **extract-concepts**: Extract concepts from notes
+10. **analyze-tags**: Tag usage statistics
+11. **vault-health-enhanced**: Comprehensive health metrics
+
+### Knowledge Workflows (3)
+12. **process-conversation**: Convert conversations to notes
+13. **evergreen-note**: Manage evergreen notes
+14. **decision-log**: Document decisions (ADR format)
+
+### Linting (2)
+15. **lint-note**: Lint individual note
+16. **lint-folder**: Batch lint notes
+
+### Administrative (4)
+17. **get-server-status**: Server health and status
+18. **index-status**: Check search index status
+19. **rebuild-index**: Force rebuild search index
+20. **verify-database**: Database integrity checks
 
 ## Development
+
+### Build
+
+```bash
+npm run build       # Compile TypeScript
+npm run watch       # Watch mode for development
+npm run clean       # Remove build artifacts
+```
+
+### Testing
+
+```bash
+npm test            # Run tests
+npm run test:coverage  # Run with coverage report
+```
+
+### Linting
+
+```bash
+npm run lint        # Run ESLint
+```
+
+## Architecture
 
 ### Project Structure
 
 ```
 obsidian-knowledge-mcp/
 ├── src/
-│   ├── types/          # TypeScript type definitions
-│   ├── config/         # Configuration management
-│   ├── database/       # SQLite database layer
-│   ├── vault/          # Vault and file operations
-│   ├── tools/          # MCP tool implementations
-│   ├── server.ts       # MCP server setup
-│   └── index.ts        # Main entry point
-├── build/              # Compiled JavaScript
-├── tests/              # Test files
-└── CLAUDE.md           # Comprehensive specification
+│   ├── index.ts              # CLI entrypoint
+│   ├── server.ts             # MCP server implementation
+│   ├── config/               # Configuration management
+│   ├── database/             # SQLite provenance database
+│   ├── tools/                # MCP tool implementations (20 tools)
+│   ├── search/               # Multi-algorithm search engine
+│   ├── vault/                # File operations & frontmatter
+│   ├── linter/               # Markdown linting engine
+│   └── types/                # TypeScript type definitions
+├── build/                    # Compiled JavaScript (generated)
+├── tests/                    # Test files
+├── docs/                     # Additional documentation
+├── claude.mcp.json           # Claude Desktop config template
+├── chatgpt.mcp.json          # ChatGPT config template
+├── mcp-config.example.json   # Server config example
+├── MIGRATION.md              # Migration guide
+├── CLAUDE.md                 # AI assistant development guide
+├── package.json
+└── tsconfig.json
 ```
 
-### Building
+### Technology Stack
 
-```bash
-npm run build        # Compile TypeScript
-npm run watch        # Watch mode for development
-npm run clean        # Clean build artifacts
+- **TypeScript**: Type-safe server implementation
+- **@modelcontextprotocol/sdk**: MCP protocol support
+- **better-sqlite3**: Provenance database
+- **@leeoniya/ufuzzy**: Content fuzzy search
+- **fuzzysort**: Path fuzzy search
+- **gray-matter**: Frontmatter parsing
+- **remark**: Markdown processing and linting
+
+### Provenance Database Schema
+
+All write operations are tracked in SQLite:
+
+```sql
+CREATE TABLE note_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vault TEXT NOT NULL,
+  note_path TEXT NOT NULL,
+  operation TEXT NOT NULL,  -- 'create', 'update', 'delete'
+  actor TEXT NOT NULL,       -- User/system identifier
+  source TEXT NOT NULL,      -- 'mcp', 'api', 'sync', etc.
+  timestamp TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  conversation_id TEXT,
+  insight_id TEXT,
+  decision_id TEXT,
+  content_hash TEXT NOT NULL,
+  content_before TEXT,
+  content_after TEXT,
+  metadata TEXT
+);
 ```
 
-### Testing
+## Migration
 
-```bash
-npm test             # Run tests
-npm run test:coverage # Run tests with coverage
-```
-
-### Linting
-
-```bash
-npm run lint         # Lint TypeScript code
-```
-
-## Architecture
-
-The server implements a layered architecture:
-
-1. **MCP Layer**: Protocol handling and tool registration
-2. **Tool Layer**: Business logic for each MCP tool
-3. **Vault Layer**: File operations and frontmatter parsing
-4. **Database Layer**: SQLite operations and migrations
-5. **Config Layer**: Configuration loading and validation
-
-## Provenance Tracking
-
-All write operations are tracked in the `note_history` table:
-
-- Content hashes (SHA-256)
-- Actor identification (user/llm/system)
-- Source context
-- Request IDs for idempotency
-- Optional diffs
-
-## Frontmatter Schema
-
-The server supports a canonical frontmatter schema for knowledge management:
-
-```yaml
-type: atomic | evergreen | decision | project | framework | journal
-para: project | area | resource | archive
-stage: capture | process | connect | synthesize | crystallize
-created: 2025-11-18
-updated: 2025-11-19
-tags:
-  - Domain/Topic
-  - Category/Subcategory
-status: draft | evergreen | needs-review | closed
-confidence: low | medium | high
-```
-
-## License
-
-MIT
+If migrating from an earlier implementation, see [MIGRATION.md](MIGRATION.md) for detailed migration instructions.
 
 ## Contributing
 
-See CLAUDE.md for the full specification and implementation plan.
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests and linting
+5. Submit a pull request
+
+See [CLAUDE.md](CLAUDE.md) for development guidelines.
+
+## License
+
+MIT License - see LICENSE file for details
+
+## Support
+
+- **Issues**: https://github.com/yourusername/obsidian-knowledge-mcp/issues
+- **Documentation**: https://github.com/yourusername/obsidian-knowledge-mcp
+- **MCP Specification**: https://modelcontextprotocol.io
+
+## Acknowledgments
+
+- Built on the [Model Context Protocol](https://modelcontextprotocol.io) by Anthropic
+- Inspired by Obsidian's knowledge management philosophy
+- Uses fuzzy search algorithms from [@leeoniya/ufuzzy](https://github.com/leeoniya/uFuzzy) and [fuzzysort](https://github.com/farzher/fuzzysort)
+
+---
+
+**Version**: 0.1.0
+**Last Updated**: 2025-01-19
