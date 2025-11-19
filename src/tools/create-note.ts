@@ -3,18 +3,32 @@
  */
 
 import { ServerContext } from '../server.js';
-import { NoteContent, ProvenanceFields, ToolResponse } from '../types/core.js';
+import { NoteContent, ProvenanceFields, ToolResponse, NoteType, ParaCategory, LifecycleStage } from '../types/core.js';
 import { validateVault } from '../config/index.js';
 import { FileOperations } from '../vault/file-operations.js';
 import { serializeFrontmatter, parseFrontmatter, extractMetadata } from '../vault/frontmatter.js';
 import { computeHash } from '../database/index.js';
+import { createNoteFromTemplate, TemplateOptions } from '../templates/template-manager.js';
+import { inferDefaultsFromPath, CanonicalFrontmatter } from '../vault/frontmatter-schema.js';
 
 export interface CreateNoteInput extends ProvenanceFields {
   vault: string;
   path: string;
   frontmatter?: Record<string, any>;
   body?: string;
-  templateId?: string;
+  // Template options
+  type?: NoteType;
+  para?: ParaCategory;
+  stage?: LifecycleStage;
+  title?: string;
+  useTemplate?: boolean; // If true, apply template for the specified type
+  inferFromPath?: boolean; // If true, infer type/para/stage from path (default: true)
+  addCoherenceIds?: {
+    conversation?: boolean;
+    insight?: boolean;
+    decision?: boolean;
+    concept?: boolean;
+  };
   autoLint?: boolean;
 }
 
@@ -66,25 +80,74 @@ export async function handleCreateNote(
     // Validate vault exists
     const vault = validateVault(context.config, args.vault);
 
-    // Prepare frontmatter with defaults
-    const frontmatter = args.frontmatter || {};
+    let frontmatter: Record<string, any>;
+    let body: string;
 
-    // Add created/updated timestamps if not present
-    const now = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    if (!frontmatter.created) {
-      frontmatter.created = now;
-    }
-    if (!frontmatter.updated) {
-      frontmatter.updated = now;
+    // Use template system if requested or if type is specified
+    if (args.useTemplate || args.type) {
+      const templateOptions: TemplateOptions = {
+        type: args.type,
+        para: args.para,
+        stage: args.stage,
+        title: args.title,
+        addCoherenceIds: args.addCoherenceIds
+      };
+
+      const templateResult = createNoteFromTemplate(
+        args.path,
+        templateOptions,
+        args.frontmatter as Partial<CanonicalFrontmatter>
+      );
+
+      frontmatter = templateResult.frontmatter as Record<string, any>;
+      body = args.body || templateResult.body;
+    } else {
+      // Manual frontmatter specification
+      frontmatter = args.frontmatter || {};
+      body = args.body || '';
+
+      // Infer defaults from path if enabled (default: true)
+      if (args.inferFromPath !== false) {
+        const pathDefaults = inferDefaultsFromPath(args.path);
+
+        // Apply path defaults only if not already specified
+        if (!frontmatter.type && pathDefaults.type) {
+          frontmatter.type = pathDefaults.type;
+        }
+        if (!frontmatter.para && pathDefaults.para) {
+          frontmatter.para = pathDefaults.para;
+        }
+        if (!frontmatter.stage && pathDefaults.stage) {
+          frontmatter.stage = pathDefaults.stage;
+        }
+      }
+
+      // Add created/updated timestamps if not present
+      const now = new Date().toISOString();
+      if (!frontmatter.created) {
+        frontmatter.created = now;
+      }
+      if (!frontmatter.updated) {
+        frontmatter.updated = now;
+      }
+
+      // Add title if provided
+      if (args.title && !frontmatter.title) {
+        frontmatter.title = args.title;
+      }
+
+      // Ensure tags array exists
+      if (!frontmatter.tags) {
+        frontmatter.tags = [];
+      }
     }
 
-    // Add source if provided
+    // Always add source if provided
     if (args.source && !frontmatter.source) {
       frontmatter.source = args.source;
     }
 
     // Serialize content
-    const body = args.body || '';
     const content = serializeFrontmatter(frontmatter, body);
 
     // Check if file already exists

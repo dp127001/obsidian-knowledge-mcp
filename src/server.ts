@@ -25,6 +25,9 @@ import { handleFindBrokenLinks } from './tools/find-broken-links.js';
 import { handleExtractConcepts } from './tools/extract-concepts.js';
 import { handleAnalyzeTags } from './tools/analyze-tags.js';
 import { handleAnalyzeConnections } from './tools/analyze-connections.js';
+import { handleProcessConversation } from './tools/process-conversation.js';
+import { handleEvergreenNote } from './tools/evergreen-note.js';
+import { handleDecisionLog } from './tools/decision-log.js';
 
 /**
  * MCP Server context
@@ -240,6 +243,106 @@ export function createServer(context: ServerContext): Server {
         },
         required: ['vault']
       }
+    },
+    {
+      name: 'process-conversation',
+      description: 'Convert conversations into structured atomic notes with coherence IDs',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          conversation: {
+            description: 'Conversation as array of messages or raw text'
+          },
+          conversationTitle: { type: 'string', description: 'Title for conversation note' },
+          outputPath: { type: 'string', description: 'Base path for generated notes (default: conversations/)' },
+          extractInsights: { type: 'boolean', description: 'Extract atomic insights (default: true)' },
+          insightsPath: { type: 'string', description: 'Path for insights (default: atomic/)' },
+          strategy: {
+            type: 'string',
+            enum: ['manual', 'auto'],
+            description: 'Manual: just save conversation, Auto: extract insights'
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Tags to apply to generated notes'
+          },
+          source: { type: 'string', description: 'Provenance source' },
+          actor: { type: 'string', enum: ['user', 'llm', 'system'], description: 'Actor' },
+          requestId: { type: 'string', description: 'Idempotency token' }
+        },
+        required: ['vault', 'conversation']
+      }
+    },
+    {
+      name: 'evergreen-note',
+      description: 'Create or update evergreen notes by synthesizing atomic notes',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          title: { type: 'string', description: 'Note title' },
+          path: { type: 'string', description: 'Path for new evergreen note' },
+          sourceNotes: {
+            type: 'array',
+            description: 'Atomic notes to synthesize'
+          },
+          body: { type: 'string', description: 'Manual body content' },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Tags to apply'
+          },
+          updateExisting: { type: 'boolean', description: 'If true, update existing note at path' },
+          source: { type: 'string', description: 'Provenance source' },
+          actor: { type: 'string', enum: ['user', 'llm', 'system'], description: 'Actor' },
+          requestId: { type: 'string', description: 'Idempotency token' }
+        },
+        required: ['vault', 'title']
+      }
+    },
+    {
+      name: 'decision-log',
+      description: 'Create or update ADR-style decision records',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          title: { type: 'string', description: 'Decision title' },
+          path: { type: 'string', description: 'Optional custom path' },
+          status: {
+            type: 'string',
+            enum: ['proposed', 'accepted', 'rejected', 'superseded'],
+            description: 'Decision status'
+          },
+          context: { type: 'string', description: 'What is the issue motivating this decision?' },
+          decision: { type: 'string', description: 'What is the change we\'re proposing/doing?' },
+          consequences: { type: 'string', description: 'What becomes easier or harder?' },
+          alternatives: { type: 'string', description: 'What other options were considered?' },
+          dependsOn: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Paths to other decision notes'
+          },
+          supersedes: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Paths to decisions this supersedes'
+          },
+          reviewDate: { type: 'string', description: 'ISO date for review' },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Tags to apply'
+          },
+          updateExisting: { type: 'boolean', description: 'If true, update existing decision' },
+          source: { type: 'string', description: 'Provenance source' },
+          actor: { type: 'string', enum: ['user', 'llm', 'system'], description: 'Actor' },
+          requestId: { type: 'string', description: 'Idempotency token' }
+        },
+        required: ['vault', 'title']
+      }
     }
   ];
 
@@ -294,6 +397,18 @@ export function createServer(context: ServerContext): Server {
 
         case 'analyze-connections':
           result = await handleAnalyzeConnections(context, (args || {}) as any);
+          break;
+
+        case 'process-conversation':
+          result = await handleProcessConversation(context, (args || {}) as any);
+          break;
+
+        case 'evergreen-note':
+          result = await handleEvergreenNote(context, (args || {}) as any);
+          break;
+
+        case 'decision-log':
+          result = await handleDecisionLog(context, (args || {}) as any);
           break;
 
         default:
