@@ -1,0 +1,47 @@
+{
+  "name": "obsidian-knowledge-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Obsidian knowledge base access with provenance, search, and knowledge workflows",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "obsidian-knowledge-mcp": "build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf build"
+  },
+  "keywords": [
+    "mcp",
+    "obsidian",
+    "knowledge-management",
+    "markdown",
+    "model-context-protocol"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "better-sqlite3": "^11.0.0",
+    "gray-matter": "^4.0.3",
+    "fuzzysort": "^3.0.2",
+    "@leeoniya/ufuzzy": "^1.0.14",
+    "yaml": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.9",
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
