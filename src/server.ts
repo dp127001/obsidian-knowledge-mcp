@@ -31,6 +31,7 @@ import { handleFindBrokenLinks } from './tools/find-broken-links.js';
 import { handleExtractConcepts } from './tools/extract-concepts.js';
 import { handleAnalyzeTags } from './tools/analyze-tags.js';
 import { handleAnalyzeConnections } from './tools/analyze-connections.js';
+import { handleExtractKnowledge } from './tools/extract-knowledge.js';
 import { handleProcessConversation } from './tools/process-conversation.js';
 import { handleEvergreenNote } from './tools/evergreen-note.js';
 import { handleDecisionLog } from './tools/decision-log.js';
@@ -377,6 +378,34 @@ export function createServer(context: ServerContext): Server {
           limitSuggestions: { type: 'number', description: 'Max suggestions per note' }
         },
         required: ['vault']
+      }
+    },
+    {
+      name: 'extract-knowledge',
+      description: 'Extract atomic insights from source text for cross-vault abstraction and knowledge workflows',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sourceText: { type: 'string', description: 'Source text to analyze' },
+          context: {
+            type: 'object',
+            description: 'Optional context for extraction',
+            properties: {
+              vault: { type: 'string', description: 'Vault ID if applicable' },
+              origin: {
+                type: 'string',
+                enum: ['conversation', 'note', 'document'],
+                description: 'Type of source'
+              },
+              originRef: {
+                type: 'object',
+                description: 'Reference to source (NoteRef or generic reference)'
+              },
+              date: { type: 'string', description: 'ISO date of source' }
+            }
+          }
+        },
+        required: ['sourceText']
       }
     },
     {
@@ -771,6 +800,10 @@ export function createServer(context: ServerContext): Server {
 
         case 'analyze-connections':
           result = await handleAnalyzeConnections(context, (args || {}) as any);
+          break;
+
+        case 'extract-knowledge':
+          result = await handleExtractKnowledge(context, (args || {}) as any);
           break;
 
         case 'process-conversation':
