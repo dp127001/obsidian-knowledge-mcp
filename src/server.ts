@@ -48,6 +48,11 @@ import { handleFindSimilarNotes } from './tools/find-similar-notes.js';
 import { handleFindByConcept } from './tools/find-by-concept.js';
 import { handleFindConceptVariations } from './tools/find-concept-variations.js';
 import { handleGetActivityTimeline } from './tools/get-activity-timeline.js';
+import { handleFindContentClusters } from './tools/find-content-clusters.js';
+import { handleFindFrequentPairs } from './tools/find-frequent-pairs.js';
+import { handleFindCoCitation } from './tools/find-co-citation.js';
+import { handleFindTemporalRelated } from './tools/find-temporal-related.js';
+import { handleFindTemporalClusters } from './tools/find-temporal-clusters.js';
 
 /**
  * MCP Server context
@@ -680,6 +685,79 @@ export function createServer(context: ServerContext): Server {
       }
     },
     {
+      name: 'find-content-clusters',
+      description: 'Find clusters of notes grouped by content similarity using tags and links',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          minClusterSize: { type: 'number', description: 'Minimum notes per cluster (default: 3)' },
+          maxClusters: { type: 'number', description: 'Maximum clusters to return (default: 20)' }
+        },
+        required: ['vault']
+      }
+    },
+    {
+      name: 'find-frequent-pairs',
+      description: 'Find note pairs that are frequently co-cited together',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          minCoCitationCount: { type: 'number', description: 'Minimum co-citations (default: 2)' },
+          limit: { type: 'number', description: 'Max pairs to return (default: 20)' }
+        },
+        required: ['vault']
+      }
+    },
+    {
+      name: 'find-co-citation',
+      description: 'Find notes frequently co-cited with a given anchor note',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          path: { type: 'string', description: 'Anchor note path' },
+          minCoCitationCount: { type: 'number', description: 'Minimum co-citations (default: 2)' },
+          limit: { type: 'number', description: 'Max results to return (default: 20)' }
+        },
+        required: ['vault', 'path']
+      }
+    },
+    {
+      name: 'find-temporal-related',
+      description: 'Find notes temporally related to an anchor note (created/updated around the same time)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          path: { type: 'string', description: 'Anchor note path' },
+          windowDays: { type: 'number', description: 'Time window in days (default: 7)' },
+          limit: { type: 'number', description: 'Max results to return (default: 20)' }
+        },
+        required: ['vault', 'path']
+      }
+    },
+    {
+      name: 'find-temporal-clusters',
+      description: 'Find clusters of notes grouped by temporal proximity',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          timeField: {
+            type: 'string',
+            enum: ['created', 'updated'],
+            description: 'Which timestamp to cluster by (default: updated)'
+          },
+          windowDays: { type: 'number', description: 'Time window in days (default: 7)' },
+          minClusterSize: { type: 'number', description: 'Minimum notes per cluster (default: 3)' },
+          maxClusters: { type: 'number', description: 'Maximum clusters to return (default: 20)' }
+        },
+        required: ['vault']
+      }
+    },
+    {
       name: 'find-by-concept',
       description: 'Find notes associated with a specific concept',
       inputSchema: {
@@ -856,6 +934,26 @@ export function createServer(context: ServerContext): Server {
 
         case 'find-similar-notes':
           result = await handleFindSimilarNotes(context, (args || {}) as any);
+          break;
+
+        case 'find-content-clusters':
+          result = await handleFindContentClusters(context, (args || {}) as any);
+          break;
+
+        case 'find-frequent-pairs':
+          result = await handleFindFrequentPairs(context, (args || {}) as any);
+          break;
+
+        case 'find-co-citation':
+          result = await handleFindCoCitation(context, (args || {}) as any);
+          break;
+
+        case 'find-temporal-related':
+          result = await handleFindTemporalRelated(context, (args || {}) as any);
+          break;
+
+        case 'find-temporal-clusters':
+          result = await handleFindTemporalClusters(context, (args || {}) as any);
           break;
 
         case 'find-by-concept':
