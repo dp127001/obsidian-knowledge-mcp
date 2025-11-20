@@ -183,6 +183,99 @@ export class KnowledgeDatabase {
   }
 
   // ========================================================================
+  // Concepts
+  // ========================================================================
+
+  /**
+   * Upsert a concept (insert or update)
+   */
+  upsertConcept(conceptId: string, term: string, normalized: string, frequency: number): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO concepts (concept_id, term, normalized, frequency)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(concept_id) DO UPDATE SET
+        term = excluded.term,
+        frequency = excluded.frequency
+    `);
+    stmt.run(conceptId, term, normalized, frequency);
+  }
+
+  /**
+   * Link a concept to a note with a score
+   */
+  linkConceptToNote(conceptId: string, vault: string, path: string, score: number): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO concept_notes (concept_id, vault, path, score)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(concept_id, vault, path) DO UPDATE SET
+        score = excluded.score
+    `);
+    stmt.run(conceptId, vault, path, score);
+  }
+
+  /**
+   * Clear all concept-note links for a vault (useful before re-indexing)
+   */
+  clearConceptNotesForVault(vault: string): void {
+    const stmt = this.db.prepare('DELETE FROM concept_notes WHERE vault = ?');
+    stmt.run(vault);
+  }
+
+  /**
+   * Get concepts for a specific note
+   */
+  getConceptsForNote(vault: string, path: string): Array<{
+    conceptId: string;
+    term: string;
+    normalized: string;
+    score: number;
+  }> {
+    const rows = this.db.prepare(`
+      SELECT c.concept_id as conceptId, c.term, c.normalized, cn.score
+      FROM concept_notes cn
+      JOIN concepts c ON c.concept_id = cn.concept_id
+      WHERE cn.vault = ? AND cn.path = ?
+      ORDER BY cn.score DESC
+    `).all(vault, path) as Array<{
+      conceptId: string;
+      term: string;
+      normalized: string;
+      score: number;
+    }>;
+    return rows;
+  }
+
+  /**
+   * Get notes for a specific concept
+   */
+  getNotesForConcept(conceptId: string, vault?: string): Array<{
+    vault: string;
+    path: string;
+    score: number;
+  }> {
+    let query = `
+      SELECT vault, path, score
+      FROM concept_notes
+      WHERE concept_id = ?
+    `;
+    const params: any[] = [conceptId];
+
+    if (vault) {
+      query += ' AND vault = ?';
+      params.push(vault);
+    }
+
+    query += ' ORDER BY score DESC';
+
+    const rows = this.db.prepare(query).all(...params) as Array<{
+      vault: string;
+      path: string;
+      score: number;
+    }>;
+    return rows;
+  }
+
+  // ========================================================================
   // Database Health
   // ========================================================================
 

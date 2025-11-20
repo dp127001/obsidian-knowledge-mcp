@@ -11,6 +11,7 @@ import { parseFrontmatter } from '../vault/frontmatter.js';
 export interface ExtractConceptsInput {
   vault: string;
   paths?: string[]; // Optional: specific paths to analyze
+  persist?: boolean; // Optional: persist concepts to database (default: true)
 }
 
 export interface ExtractConceptsOutput {
@@ -92,6 +93,9 @@ export async function handleExtractConcepts(
       variants: Set<string>;
     }>();
 
+    // Track concept-note relationships for persistence
+    const conceptNoteLinks = new Map<string, Map<string, number>>(); // conceptId -> path -> score
+
     const fileOps = new FileOperations(vault.path);
 
     // Get files to analyze
@@ -129,6 +133,12 @@ export async function handleExtractConcepts(
           const entry = conceptFrequency.get(normalized)!;
           entry.frequency += count;
           entry.variants.add(normalized);
+
+          // Track concept-note link
+          if (!conceptNoteLinks.has(normalized)) {
+            conceptNoteLinks.set(normalized, new Map());
+          }
+          conceptNoteLinks.get(normalized)!.set(filePath, count);
         }
       } catch (error) {
         // Skip files that can't be read
@@ -146,8 +156,35 @@ export async function handleExtractConcepts(
       }))
       .sort((a, b) => b.frequency - a.frequency);
 
-    // Optionally persist to database
-    // TODO: Implement persistence to concepts table
+    // Persist to database if requested (default: true)
+    const shouldPersist = args.persist !== false;
+    if (shouldPersist) {
+      // If analyzing entire vault (no specific paths), clear existing concept links
+      if (!args.paths || args.paths.length === 0) {
+        context.db.clearConceptNotesForVault(args.vault);
+      }
+
+      // Persist concepts and their relationships to notes
+      for (const concept of concepts) {
+        const conceptId = `concept-${concept.normalized}`;
+
+        // Upsert concept
+        context.db.upsertConcept(
+          conceptId,
+          concept.term,
+          concept.normalized,
+          concept.frequency
+        );
+
+        // Link concept to notes
+        const noteLinks = conceptNoteLinks.get(concept.normalized);
+        if (noteLinks) {
+          for (const [notePath, score] of noteLinks.entries()) {
+            context.db.linkConceptToNote(conceptId, args.vault, notePath, score);
+          }
+        }
+      }
+    }
 
     return {
       status: 'ok',
