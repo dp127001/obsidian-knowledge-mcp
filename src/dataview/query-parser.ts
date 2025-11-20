@@ -295,15 +295,15 @@ function extractFieldForFlatten(row: any, fieldPath: string): any {
     }
 
     // Check in fields first
-    if (value.fields && part in value.fields) {
+    if (value.fields && typeof value.fields === 'object' && !Array.isArray(value.fields) && part in value.fields) {
       value = value.fields[part];
     }
     // Then check in file
-    else if (value.file && part in value.file) {
+    else if (value.file && typeof value.file === 'object' && !Array.isArray(value.file) && part in value.file) {
       value = value.file[part];
     }
     // Direct property access
-    else if (part in value) {
+    else if (typeof value === 'object' && !Array.isArray(value) && part in value) {
       value = value[part];
     }
     else {
@@ -335,9 +335,9 @@ function setFieldValue(row: any, fieldPath: string, value: any): void {
   for (let i = 0; i < parts.length - 1; i++) {
     const part = parts[i];
 
-    if (parent.fields && part in parent.fields) {
+    if (parent.fields && typeof parent.fields === 'object' && !Array.isArray(parent.fields) && part in parent.fields) {
       parent = parent.fields[part];
-    } else if (part in parent) {
+    } else if (typeof parent === 'object' && !Array.isArray(parent) && part in parent) {
       parent = parent[part];
     } else {
       return; // Cannot set nested field

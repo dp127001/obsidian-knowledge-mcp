@@ -99,15 +99,15 @@ export class AggregationEngine {
       }
 
       // Check in fields first
-      if (value.fields && part in value.fields) {
+      if (value.fields && typeof value.fields === 'object' && !Array.isArray(value.fields) && part in value.fields) {
         value = value.fields[part];
       }
       // Then check in file
-      else if (value.file && part in value.file) {
+      else if (value.file && typeof value.file === 'object' && !Array.isArray(value.file) && part in value.file) {
         value = value.file[part];
       }
       // Direct property access
-      else if (part in value) {
+      else if (typeof value === 'object' && !Array.isArray(value) && part in value) {
         value = value[part];
       }
       else {

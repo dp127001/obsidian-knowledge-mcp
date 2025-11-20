@@ -431,7 +431,8 @@ export class ExpressionEvaluator {
     }
 
     // Frontmatter field
-    if (context.frontmatter && name in context.frontmatter) {
+    // Must check that frontmatter is an object before using 'in' operator
+    if (context.frontmatter && typeof context.frontmatter === 'object' && !Array.isArray(context.frontmatter) && name in context.frontmatter) {
       return context.frontmatter[name];
     }
 
