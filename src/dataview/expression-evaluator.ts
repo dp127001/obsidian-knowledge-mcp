@@ -45,7 +45,7 @@ export interface EvaluationContext {
 export type ExpressionNode =
   | { type: 'literal'; value: ExpressionValue }
   | { type: 'identifier'; name: string }
-  | { type: 'property'; object: ExpressionNode; property: string | number }
+  | { type: 'property'; object: ExpressionNode; property: string | number | ExpressionNode }
   | { type: 'binary'; operator: string; left: ExpressionNode; right: ExpressionNode }
   | { type: 'logical'; operator: 'AND' | 'OR'; left: ExpressionNode; right: ExpressionNode }
   | { type: 'unary'; operator: string; argument: ExpressionNode }
@@ -299,13 +299,12 @@ class ExpressionParser {
         const indexExpr = this.parseLogicalOr();
         this.expect('punctuation', ']');
 
-        // If index is a literal, extract the value
+        // If index is a literal, extract the value for optimization
         if (indexExpr.type === 'literal') {
           expr = { type: 'property', object: expr, property: indexExpr.value as string | number };
         } else {
-          // For dynamic indices, we need to evaluate the index expression
-          // For now, treat as property access with the expression
-          expr = { type: 'property', object: expr, property: 0 }; // Placeholder
+          // For dynamic indices, store the expression itself to be evaluated later
+          expr = { type: 'property', object: expr, property: indexExpr };
         }
         continue;
       }
@@ -449,7 +448,21 @@ export class ExpressionEvaluator {
 
       case 'property':
         const obj = this.evaluateNode(node.object, context);
-        return this.getProperty(obj, node.property);
+        // If property is an expression (dynamic index), evaluate it first
+        let propertyKey: string | number;
+        if (typeof node.property === 'object' && 'type' in node.property) {
+          const propValue = this.evaluateNode(node.property, context);
+          // Convert to string or number
+          if (typeof propValue === 'string' || typeof propValue === 'number') {
+            propertyKey = propValue;
+          } else {
+            // Coerce to string for non-primitive values
+            propertyKey = String(propValue);
+          }
+        } else {
+          propertyKey = node.property;
+        }
+        return this.getProperty(obj, propertyKey);
 
       case 'binary':
         return this.evaluateBinary(node.operator, node.left, node.right, context);

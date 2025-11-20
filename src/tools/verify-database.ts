@@ -85,10 +85,35 @@ export async function handleVerifyDatabase(
         row => !validVaultIds.has(row.vault)
       ).length;
 
-      // Placeholder for concepts and decisions orphan check
-      // These would check if concepts/decisions reference non-existent notes
-      const orphanedConcepts = 0;
-      const orphanedDecisions = 0;
+      // Check for orphaned concept-note links (concepts referencing non-existent notes)
+      // This checks if concept_notes table has entries for files that don't exist in file_index
+      let orphanedConcepts = 0;
+      if (tables.includes('concept_notes') && tables.includes('file_index')) {
+        const orphanedConceptsResult = db.prepare(`
+          SELECT COUNT(*) as count
+          FROM concept_notes cn
+          WHERE NOT EXISTS (
+            SELECT 1 FROM file_index fi
+            WHERE fi.vault = cn.vault AND fi.path = cn.path
+          )
+        `).get() as { count: number };
+        orphanedConcepts = orphanedConceptsResult.count;
+      }
+
+      // Check for orphaned decisions (decisions referencing non-existent notes)
+      // This checks if decisions table has entries for files that don't exist in file_index
+      let orphanedDecisions = 0;
+      if (tables.includes('decisions') && tables.includes('file_index')) {
+        const orphanedDecisionsResult = db.prepare(`
+          SELECT COUNT(*) as count
+          FROM decisions d
+          WHERE NOT EXISTS (
+            SELECT 1 FROM file_index fi
+            WHERE fi.vault = d.vault AND fi.path = d.path
+          )
+        `).get() as { count: number };
+        orphanedDecisions = orphanedDecisionsResult.count;
+      }
 
       orphanCheck = {
         orphanedHistoryEntries,
@@ -99,7 +124,11 @@ export async function handleVerifyDatabase(
 
     const success =
       (!integrityCheck || integrityCheck.passed) &&
-      (!orphanCheck || orphanCheck.orphanedHistoryEntries === 0);
+      (!orphanCheck || (
+        orphanCheck.orphanedHistoryEntries === 0 &&
+        orphanCheck.orphanedConcepts === 0 &&
+        orphanCheck.orphanedDecisions === 0
+      ));
 
     return {
       status: 'ok',

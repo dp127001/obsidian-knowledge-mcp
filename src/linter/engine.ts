@@ -423,12 +423,34 @@ export class MarkdownLinter {
   /**
    * Check tags
    */
-  private checkTags(_content: string): LintDiagnostic[] {
+  private checkTags(content: string): LintDiagnostic[] {
     const diagnostics: LintDiagnostic[] = [];
 
-    // Note: noSpacesInTags check is currently a placeholder
-    // The regex /#([^\s#]+)/g already excludes spaces by definition
-    // Additional validation could be added here in the future
+    if (this.settings.noSpacesInTags) {
+      // Check for malformed tags that contain spaces
+      // This detects patterns like "#tag with spaces" which are invalid
+      const lines = content.split('\n');
+      lines.forEach((line, idx) => {
+        // Match # followed by non-whitespace, then whitespace, then more non-whitespace
+        // This catches malformed tags like "#tag name" but not valid ones like "#tag"
+        const malformedTagPattern = /#([^\s#]+)\s+([^\s#]+)/g;
+        let match;
+        while ((match = malformedTagPattern.exec(line)) !== null) {
+          // Only report if this looks like it was intended to be a single tag
+          // (i.e., the next word isn't a separate sentence)
+          const afterTag = match[2];
+          if (afterTag && afterTag.length > 0 && !afterTag.match(/^[A-Z]/)) {
+            diagnostics.push({
+              ruleId: 'no-spaces-in-tags',
+              message: `Tag contains spaces. Use camelCase or hyphens instead: #${match[1]}${match[2]}`,
+              line: idx + 1,
+              severity: 'warning',
+              fixable: false
+            });
+          }
+        }
+      });
+    }
 
     return diagnostics;
   }
