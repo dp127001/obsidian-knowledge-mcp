@@ -29,6 +29,7 @@ export interface DataviewRow {
     mtime?: string | null;
     size?: number | null;
     outlinks?: string[];
+    inlinks?: string[];
   };
   fields: Record<string, any>;
 }
@@ -141,7 +142,7 @@ export async function handleExecuteDataviewQuery(
         const wikilinks = extractWikilinks(content);
         const outlinks = wikilinks.map(link => link.target);
 
-        // Build row object
+        // Build row object (inlinks will be populated in second pass)
         const row: DataviewRow = {
           file: {
             vault: args.vault,
@@ -150,7 +151,8 @@ export async function handleExecuteDataviewQuery(
             ctime: fileStats?.created || null,
             mtime: fileStats?.modified || null,
             size: fileStats?.sizeBytes || null,
-            outlinks
+            outlinks,
+            inlinks: [] // Will be populated in backlink index pass
           },
           fields: frontmatter || {}
         };
@@ -160,6 +162,42 @@ export async function handleExecuteDataviewQuery(
         // Skip files that fail to parse
         continue;
       }
+    }
+
+    // Build backlink index (file.inlinks)
+    // Create a map of file path/title -> inlinks
+    const backlinkIndex = new Map<string, string[]>();
+
+    for (const row of rows) {
+      for (const outlink of row.file.outlinks || []) {
+        // Find target file(s) that match this outlink
+        // Outlink can be: "Note Title", "folder/Note", "Note#heading", etc.
+        const linkTarget = outlink.split('#')[0].split('|')[0].trim();
+
+        // Try to find matching file by title or path
+        const targetRows = rows.filter(r => {
+          const fileName = r.file.path.replace(/\.md$/, '');
+          const fileTitle = r.file.title;
+          return fileTitle === linkTarget ||
+                 fileName === linkTarget ||
+                 fileName.endsWith('/' + linkTarget);
+        });
+
+        // Add backlink for each matching target
+        for (const targetRow of targetRows) {
+          if (!backlinkIndex.has(targetRow.file.path)) {
+            backlinkIndex.set(targetRow.file.path, []);
+          }
+          backlinkIndex.get(targetRow.file.path)!.push(row.file.path);
+        }
+      }
+    }
+
+    // Populate inlinks in rows
+    for (const row of rows) {
+      const inlinks = backlinkIndex.get(row.file.path) || [];
+      // Remove duplicates and convert to unique array
+      row.file.inlinks = Array.from(new Set(inlinks));
     }
 
     // Apply WHERE filter with expression evaluator
@@ -225,7 +263,8 @@ export async function handleExecuteDataviewQuery(
           ctime: row.file.ctime || null,
           mtime: row.file.mtime || null,
           size: row.file.size || null,
-          outlinks: row.file.outlinks || []
+          outlinks: row.file.outlinks || [],
+          inlinks: row.file.inlinks || []
         }
       };
 
@@ -237,7 +276,9 @@ export async function handleExecuteDataviewQuery(
         try {
           const value = extractField(spec.expression, context, evaluator);
           newFields[columnName] = value;
-        } catch {
+        } catch (error) {
+          // Log error for debugging but continue with null value
+          // console.error(`Failed to extract field ${spec.expression}:`, error);
           newFields[columnName] = null;
         }
       }
@@ -396,6 +437,10 @@ function handleGroupByQuery(
     .map(f => parseAggregateFunction(f))
     .filter((agg): agg is NonNullable<typeof agg> => agg !== null);
 
+  // Parse field specs to identify rows.* field access
+  const fieldSpecs = parsed.fields.map(f => parseFieldSpec(f));
+  const rowsFields = fieldSpecs.filter(spec => spec.expression.startsWith('rows.'));
+
   const groupByFields = parsed.groupBy || [];
 
   // Execute GROUP BY
@@ -411,6 +456,35 @@ function handleGroupByQuery(
       ...group.aggregates
     };
 
+    // Add rows.* field access
+    for (const spec of rowsFields) {
+      const columnName = spec.alias || spec.expression;
+      // Extract field path after "rows."
+      const fieldPath = spec.expression.substring(5); // Remove "rows."
+
+      // Extract field from each row in group
+      const values = group.rows.map(row => {
+        const parts = fieldPath.split('.');
+        let value: any = row;
+        for (const part of parts) {
+          if (value === null || value === undefined) break;
+          if (value.file && part in value.file) {
+            value = value.file[part];
+          } else if (value.fields && part in value.fields) {
+            value = value.fields[part];
+          } else if (typeof value === 'object' && part in value) {
+            value = value[part];
+          } else {
+            value = null;
+            break;
+          }
+        }
+        return value;
+      }).filter(v => v !== null && v !== undefined);
+
+      fields[columnName] = values;
+    }
+
     // Use first row's file info (or create synthetic)
     const firstRow = group.rows[0];
     return {
@@ -423,10 +497,11 @@ function handleGroupByQuery(
     };
   });
 
-  // Determine columns (group fields + aggregates)
+  // Determine columns (group fields + aggregates + rows fields)
   const columns = [
     ...groupByFields,
-    ...aggregates.map(agg => agg.alias || `${agg.type.toLowerCase()}_${agg.field || 'value'}`)
+    ...aggregates.map(agg => agg.alias || `${agg.type.toLowerCase()}_${agg.field || 'value'}`),
+    ...rowsFields.map(spec => spec.alias || spec.expression)
   ];
 
   // Apply SORT
@@ -510,6 +585,9 @@ function extractField(
   }
   if (spec === 'file.outlinks') {
     return (context.file as any).outlinks || [];
+  }
+  if (spec === 'file.inlinks') {
+    return (context.file as any).inlinks || [];
   }
 
   // Try to evaluate as expression (supports functions, property access, etc.)

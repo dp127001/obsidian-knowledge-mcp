@@ -133,11 +133,22 @@ export class DataviewFunctions {
     // ===== Array Functions =====
 
     /**
-     * contains(array, value) - Check if array contains value
+     * contains(array|string, value|substring) - Check if array contains value or string contains substring
      */
-    this.functions.set('contains', (array: ExpressionValue, value: ExpressionValue) => {
-      if (!Array.isArray(array)) return false;
-      return array.some(item => this.deepEqual(item, value));
+    this.functions.set('contains', (input: ExpressionValue, value: ExpressionValue) => {
+      // Array membership check
+      if (Array.isArray(input)) {
+        return input.some(item => this.deepEqual(item, value));
+      }
+      // String substring search
+      if (typeof input === 'string' && typeof value === 'string') {
+        return input.includes(value);
+      }
+      // Convert to string and check
+      if (input !== null && input !== undefined && value !== null && value !== undefined) {
+        return String(input).includes(String(value));
+      }
+      return false;
     });
 
     /**

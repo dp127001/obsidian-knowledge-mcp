@@ -54,7 +54,7 @@ function tokenize(expr: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
 
-  const keywords = new Set(['AND', 'OR', 'NOT', 'true', 'false', 'null']);
+  const keywords = new Set(['AND', 'OR', 'NOT', 'true', 'false', 'null', 'today', 'tomorrow', 'yesterday', 'now']);
 
   while (i < expr.length) {
     // Skip whitespace
@@ -345,6 +345,11 @@ class ExpressionParser {
       if (token.value === 'null') {
         this.consume();
         return { type: 'literal', value: null };
+      }
+      // Date keywords - treat as string literals for date functions
+      if (['today', 'tomorrow', 'yesterday', 'now'].includes(token.value.toLowerCase())) {
+        this.consume();
+        return { type: 'literal', value: token.value.toLowerCase() };
       }
     }
 
