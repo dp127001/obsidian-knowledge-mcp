@@ -41,6 +41,8 @@ import { handleGetServerStatus } from './tools/get-server-status.js';
 import { handleIndexStatus } from './tools/index-status.js';
 import { handleRebuildIndex } from './tools/rebuild-index.js';
 import { handleVerifyDatabase } from './tools/verify-database.js';
+import { handleBatchOperations } from './tools/batch-operations.js';
+import { handleExecuteDataviewQuery } from './tools/execute-dataview-query.js';
 
 /**
  * MCP Server context
@@ -570,6 +572,65 @@ export function createServer(context: ServerContext): Server {
           checkOrphans: { type: 'boolean', description: 'Check for orphaned entries (default: true)' }
         }
       }
+    },
+    {
+      name: 'batch-operations',
+      description: 'Execute bulk operations on multiple notes (update frontmatter, add/remove tags, move files)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          operations: {
+            type: 'array',
+            description: 'Array of operations to execute',
+            items: {
+              type: 'object',
+              properties: {
+                type: {
+                  type: 'string',
+                  enum: ['update-frontmatter', 'add-tags', 'remove-tags', 'move-file'],
+                  description: 'Operation type'
+                },
+                path: { type: 'string', description: 'Note path' },
+                changes: { type: 'object', description: 'Frontmatter changes (for update-frontmatter)' },
+                tags: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Tags to add/remove (for add-tags/remove-tags)'
+                },
+                newPath: { type: 'string', description: 'New path (for move-file)' }
+              },
+              required: ['type', 'path']
+            }
+          },
+          dryRun: { type: 'boolean', description: 'Preview changes without applying (default: true)' },
+          maxItems: { type: 'number', description: 'Maximum operations allowed (default: 20)' },
+          source: { type: 'string', description: 'Provenance source' },
+          actor: { type: 'string', enum: ['user', 'llm', 'system'], description: 'Actor' },
+          requestId: { type: 'string', description: 'Idempotency token' }
+        },
+        required: ['vault', 'operations']
+      }
+    },
+    {
+      name: 'execute-dataview-query',
+      description: 'Execute Dataview queries (MVP subset: TABLE, FROM, WHERE, SORT, LIMIT)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          query: {
+            type: 'string',
+            description: 'Dataview Query Language (DQL) query. Supports: TABLE fields FROM source WHERE condition SORT field LIMIT n'
+          },
+          format: {
+            type: 'string',
+            enum: ['table', 'list', 'task', 'raw'],
+            description: 'Output format (default: table)'
+          }
+        },
+        required: ['vault', 'query']
+      }
     }
   ];
 
@@ -688,6 +749,14 @@ export function createServer(context: ServerContext): Server {
 
         case 'verify-database':
           result = await handleVerifyDatabase(context, (args || {}) as any);
+          break;
+
+        case 'batch-operations':
+          result = await handleBatchOperations(context, (args || {}) as any);
+          break;
+
+        case 'execute-dataview-query':
+          result = await handleExecuteDataviewQuery(context, (args || {}) as any);
           break;
 
         default:
