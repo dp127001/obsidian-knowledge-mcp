@@ -652,7 +652,7 @@ export function createServer(context: ServerContext): Server {
     },
     {
       name: 'execute-dataview-query',
-      description: 'Execute Dataview queries (MVP subset: TABLE, FROM, WHERE, SORT, LIMIT)',
+      description: 'Execute Dataview queries (MVP subset: TABLE, FROM, WHERE, SORT, LIMIT). Results are automatically limited to prevent excessive token usage. Default limits: TABLE=1000, LIST/TASK=100. Use maxResults parameter to override.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -665,6 +665,12 @@ export function createServer(context: ServerContext): Server {
             type: 'string',
             enum: ['table', 'list', 'task', 'raw'],
             description: 'Output format (default: table)'
+          },
+          maxResults: {
+            type: 'number',
+            description: 'Maximum number of results to return. Overrides query LIMIT clause and defaults. Prevents excessive token usage. Default: 1000 for TABLE, 100 for LIST/TASK. Set lower for large vaults.',
+            minimum: 1,
+            maximum: 5000
           }
         },
         required: ['vault', 'query']

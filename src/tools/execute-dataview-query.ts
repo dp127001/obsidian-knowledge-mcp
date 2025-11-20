@@ -58,7 +58,9 @@ export interface ExecuteDataviewQueryOutput {
   tasks?: TaskItem[];
   raw?: any;
   resultCount: number;
+  totalCount?: number; // Total before truncation
   truncated: boolean;
+  warning?: string; // Warning message when results are truncated
   queryParsed: {
     type: string;
     fields: string[];
@@ -322,10 +324,13 @@ export async function handleExecuteDataviewQuery(
     const effectiveLimit = parsed.limit || args.maxResults || defaultLimit;
     let finalRows = rows;
     let truncated = false;
+    let warning: string | undefined;
+    const totalCount = rows.length;
 
     if (effectiveLimit && effectiveLimit > 0 && rows.length > effectiveLimit) {
       finalRows = rows.slice(0, effectiveLimit);
       truncated = true;
+      warning = `⚠️ Results truncated: returning ${effectiveLimit} of ${totalCount} results to prevent excessive token usage. Use 'maxResults' parameter or 'LIMIT' clause in query to control result size.`;
     }
 
     return {
@@ -335,7 +340,9 @@ export async function handleExecuteDataviewQuery(
         columns: columnNames,
         rows: finalRows,
         resultCount: finalRows.length,
+        totalCount: truncated ? totalCount : undefined,
         truncated,
+        warning,
         queryParsed: {
           type: parsed.type,
           fields: parsed.fields,
@@ -424,10 +431,13 @@ async function handleTaskQuery(
   const effectiveLimit = parsed.limit || args.maxResults || defaultLimit;
   let finalTasks = allTasks;
   let truncated = false;
+  let warning: string | undefined;
+  const totalCount = allTasks.length;
 
   if (effectiveLimit && effectiveLimit > 0 && allTasks.length > effectiveLimit) {
     finalTasks = allTasks.slice(0, effectiveLimit);
     truncated = true;
+    warning = `⚠️ Results truncated: returning ${effectiveLimit} of ${totalCount} tasks to prevent excessive token usage. Use 'maxResults' parameter or 'LIMIT' clause in query to control result size.`;
   }
 
   return {
@@ -436,7 +446,9 @@ async function handleTaskQuery(
       resultType: 'task',
       tasks: finalTasks,
       resultCount: finalTasks.length,
+      totalCount: truncated ? totalCount : undefined,
       truncated,
+      warning,
       queryParsed: {
         type: parsed.type,
         fields: parsed.fields,
@@ -574,10 +586,13 @@ function handleGroupByQuery(
   const effectiveLimit = parsed.limit || args.maxResults || defaultLimit;
   let finalRows = resultRows;
   let truncated = false;
+  let warning: string | undefined;
+  const totalCount = resultRows.length;
 
   if (effectiveLimit && effectiveLimit > 0 && resultRows.length > effectiveLimit) {
     finalRows = resultRows.slice(0, effectiveLimit);
     truncated = true;
+    warning = `⚠️ Results truncated: returning ${effectiveLimit} of ${totalCount} results to prevent excessive token usage. Use 'maxResults' parameter or 'LIMIT' clause in query to control result size.`;
   }
 
   return {
@@ -587,7 +602,9 @@ function handleGroupByQuery(
       columns,
       rows: finalRows,
       resultCount: finalRows.length,
+      totalCount: truncated ? totalCount : undefined,
       truncated,
+      warning,
       queryParsed: {
         type: parsed.type,
         fields: parsed.fields,

@@ -363,6 +363,88 @@ SORT rating DESC
 LIMIT 5
 ```
 
+### Result Limits and Token Management
+
+⚠️ **Important**: Query results are automatically limited to prevent excessive token usage in conversations.
+
+**Default Limits:**
+- **TABLE queries**: 1000 rows
+- **LIST queries**: 100 items
+- **TASK queries**: 100 tasks
+
+**Override Limits:**
+
+1. **Using LIMIT clause in query** (recommended):
+   ```sql
+   TABLE file.name, rating
+   FROM #project
+   LIMIT 20
+   ```
+
+2. **Using maxResults parameter** (MCP tool parameter):
+   ```json
+   {
+     "vault": "my-vault",
+     "query": "TABLE file.name FROM #project",
+     "maxResults": 50
+   }
+   ```
+
+**Precedence**: Query `LIMIT` clause overrides `maxResults` parameter, which overrides defaults.
+
+**Truncation Warnings:**
+
+When results are truncated, you'll receive a warning message:
+```
+⚠️ Results truncated: returning 100 of 523 results to prevent excessive token usage.
+Use 'maxResults' parameter or 'LIMIT' clause in query to control result size.
+```
+
+The response will include:
+- `truncated: true` - Boolean flag indicating truncation occurred
+- `totalCount: 523` - Total results before truncation
+- `resultCount: 100` - Number of results actually returned
+- `warning: "..."` - Human-readable warning message
+
+**Best Practices:**
+
+1. **Always use LIMIT** for large vaults:
+   ```sql
+   -- Good: Bounded result set
+   TABLE file.name, rating
+   FROM #project
+   SORT rating DESC
+   LIMIT 20
+   ```
+
+2. **Use specific filters** before LIMIT:
+   ```sql
+   -- Good: Filter first, then limit
+   TABLE file.name, rating
+   FROM #project
+   WHERE rating > 7
+   SORT rating DESC
+   LIMIT 10
+   ```
+
+3. **Avoid unbounded queries** on large vaults:
+   ```sql
+   -- Caution: May return thousands of rows (will be truncated)
+   TABLE file.name, rating
+   FROM #all
+   -- Better: Add LIMIT
+   LIMIT 50
+   ```
+
+4. **Use GROUP BY for summaries** instead of full results:
+   ```sql
+   -- Good: Aggregated summary instead of all rows
+   TABLE category, COUNT() AS count, AVG(rating) AS avg
+   FROM #project
+   GROUP BY category
+   SORT count DESC
+   ```
+
 ---
 
 ## Complete Examples
@@ -497,9 +579,26 @@ WHERE date(created) >= date("2025-01-15")
 
 2. **Apply WHERE before GROUP BY**: Reduces rows to aggregate
 
-3. **Use LIMIT**: Especially for large vaults
+3. **Always use LIMIT**: Especially for large vaults
+   ```sql
+   -- Good: Explicit limit prevents token exhaustion
+   TABLE file.name, rating
+   FROM #project
+   LIMIT 50
+   ```
 
-4. **Index-friendly queries**: Frontmatter field comparisons are fast
+4. **Use maxResults parameter**: For dynamic control over result size
+   - Set lower limits for exploratory queries (10-20 results)
+   - Increase limits only when you need full data sets
+   - Remember: 1000 rows can consume significant tokens
+
+5. **Index-friendly queries**: Frontmatter field comparisons are fast
+
+6. **Token-conscious querying**:
+   - Start with small LIMIT values and increase if needed
+   - Use GROUP BY for aggregated summaries instead of full row lists
+   - Filter with WHERE before sorting to reduce result size
+   - Monitor the `truncated` flag and adjust queries accordingly
 
 ---
 
