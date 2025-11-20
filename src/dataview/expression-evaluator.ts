@@ -20,6 +20,9 @@ export interface EvaluationContext {
     name: string;
     folder: string;
     ext: string;
+    ctime?: Date | string | null;
+    mtime?: Date | string | null;
+    size?: number | null;
   };
   body?: string;
 }

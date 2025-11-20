@@ -22,7 +22,12 @@ import { AggregationEngine, parseAggregateFunction, isAggregateFunction } from '
 import { parseDataviewQuery, matchesFromClause, applyFlatten } from '../dataview/query-parser.js';
 
 export interface DataviewRow {
-  file: NoteRef & { title: string };
+  file: NoteRef & {
+    title: string;
+    ctime?: string | null;
+    mtime?: string | null;
+    size?: number | null;
+  };
   fields: Record<string, any>;
 }
 
@@ -89,7 +94,7 @@ export async function handleExecuteDataviewQuery(
     const allFiles = await fileOps.listFiles('', {
       recursive: true,
       notesOnly: true,
-      includeMetadata: false
+      includeMetadata: true
     });
 
     // Build initial rows
@@ -111,12 +116,23 @@ export async function handleExecuteDataviewQuery(
           }
         }
 
+        // Get file stats for metadata
+        let fileStats: { created: string; modified: string; sizeBytes: number } | null = null;
+        try {
+          fileStats = await fileOps.getFileStats(file.path);
+        } catch {
+          // File stats unavailable, continue with null values
+        }
+
         // Build row object
         const row: DataviewRow = {
           file: {
             vault: args.vault,
             path: file.path,
-            title
+            title,
+            ctime: fileStats?.created || null,
+            mtime: fileStats?.modified || null,
+            size: fileStats?.sizeBytes || null
           },
           fields: frontmatter || {}
         };
@@ -141,7 +157,10 @@ export async function handleExecuteDataviewQuery(
               folder: row.file.path.includes('/')
                 ? row.file.path.substring(0, row.file.path.lastIndexOf('/'))
                 : '',
-              ext: 'md'
+              ext: 'md',
+              ctime: row.file.ctime || null,
+              mtime: row.file.mtime || null,
+              size: row.file.size || null
             }
           };
           const result = evaluator.evaluate(parsed.where!, context);
@@ -174,7 +193,10 @@ export async function handleExecuteDataviewQuery(
           folder: row.file.path.includes('/')
             ? row.file.path.substring(0, row.file.path.lastIndexOf('/'))
             : '',
-          ext: 'md'
+          ext: 'md',
+          ctime: row.file.ctime || null,
+          mtime: row.file.mtime || null,
+          size: row.file.size || null
         }
       };
 
@@ -363,6 +385,15 @@ function extractField(
   }
   if (spec === 'file.folder') {
     return context.file.folder;
+  }
+  if (spec === 'file.ctime') {
+    return context.file.ctime;
+  }
+  if (spec === 'file.mtime') {
+    return context.file.mtime;
+  }
+  if (spec === 'file.size') {
+    return context.file.size;
   }
 
   // Try to evaluate as expression (supports functions, property access, etc.)
