@@ -4,6 +4,7 @@
 
 import { ServerContext } from '../server.js';
 import { ToolResponse } from '../types/core.js';
+import { FileOperations } from '../vault/file-operations.js';
 
 export interface ListVaultsOutput {
   vaults: Array<{
@@ -27,16 +28,38 @@ export async function handleListVaults(
   _args: Record<string, unknown>
 ): Promise<ToolResponse<ListVaultsOutput>> {
   try {
-    const vaults = context.config.vaults.map(vault => ({
-      id: vault.id,
-      name: vault.name,
-      path: vault.path,
-      enabled: vault.enabled,
-      indexedFileCount: context.db.getIndexedFileCount(vault.id),
-      lastIndexedAt: context.db.getLastIndexedAt(vault.id),
-      needsRebuild: false, // TODO: Implement rebuild detection
-      classification: vault.classification
-    }));
+    const vaults = await Promise.all(
+      context.config.vaults.map(async vault => {
+        const indexedFileCount = context.db.getIndexedFileCount(vault.id);
+
+        // Detect if rebuild is needed by comparing indexed vs actual file count
+        let needsRebuild = false;
+        try {
+          const fileOps = new FileOperations(vault.path);
+          const files = await fileOps.listFiles('', {
+            recursive: true,
+            notesOnly: true,
+            includeMetadata: false
+          });
+          const actualFileCount = files.filter(f => f.type === 'file' && f.path.endsWith('.md')).length;
+          needsRebuild = indexedFileCount !== actualFileCount;
+        } catch (error) {
+          // If we can't read the vault, assume rebuild needed
+          needsRebuild = true;
+        }
+
+        return {
+          id: vault.id,
+          name: vault.name,
+          path: vault.path,
+          enabled: vault.enabled,
+          indexedFileCount,
+          lastIndexedAt: context.db.getLastIndexedAt(vault.id),
+          needsRebuild,
+          classification: vault.classification
+        };
+      })
+    );
 
     return {
       status: 'ok',
