@@ -27,62 +27,36 @@ export interface TypeCounts {
   untyped: number;
 }
 
-export interface OrphanMetrics {
-  totalOrphans: number;
-  orphanPaths: string[];
-  // Atomics are often intentionally unlinked, so we track separately
-  orphanAtomics: number;
-  orphanEvergreenOrDecision: number;
-}
-
-export interface BacklinkMetrics {
-  averageBacklinks: number;
-  maxBacklinks: number;
-  maxBacklinksPath: string;
-  notesWithNoBacklinks: number;
-}
-
-export interface EvergreenMetrics {
-  totalEvergreen: number;
-  medianUpdateDays: number; // Days since last update
-  staleEvergreen: number; // Not updated in 90+ days
-  staleEvergreenPaths: string[];
-}
-
-export interface DecisionMetrics {
-  totalDecisions: number;
-  overdueReviews: number; // Decisions past review_date
-  overdueDecisionPaths: string[];
-  byStatus: {
-    proposed: number;
-    accepted: number;
-    rejected: number;
-    superseded: number;
-  };
-}
-
-export interface LintHygieneMetrics {
-  sampleSize: number;
-  notesWithIssues: number;
-  totalIssues: number;
-  averageIssuesPerNote: number;
-  issuesBySeverity: {
-    error: number;
-    warning: number;
-    info: number;
-  };
+/**
+ * Vault health statistics matching spec §5.6.4
+ */
+export interface VaultHealthStats {
+  totalNotes: number;
+  atomicNotes: number;
+  evergreenNotes: number;
+  decisionLogs: number;
+  trueOrphans: number;          // Orphans excluding atomics
+  orphanPercentage: number;     // Percentage of non-atomic notes that are orphans
+  avgBacklinksPerNote: number;
+  evergreenUpdateMedianDays?: number;
+  overdueDecisions?: number;
+  lintIssuesSampled?: number;
 }
 
 export interface VaultHealthEnhancedOutput {
-  vault: string;
-  totalNotes: number;
-  typeCounts: TypeCounts;
-  orphans: OrphanMetrics;
-  backlinks: BacklinkMetrics;
-  evergreen: EvergreenMetrics;
-  decisions: DecisionMetrics;
-  lintHygiene?: LintHygieneMetrics;
-  timestamp: string;
+  vault: {
+    id: string;
+    name: string;
+  };
+  stats: VaultHealthStats;
+  recommendations: string[];
+  // Optional detailed breakdowns for debugging
+  details?: {
+    typeCounts: TypeCounts;
+    orphanPaths: string[];        // Paths of true orphans only
+    staleEvergreenPaths: string[];
+    overdueDecisionPaths: string[];
+  };
 }
 
 /**
@@ -227,29 +201,28 @@ export async function handleVaultHealthEnhanced(
       }
     }
 
-    // Calculate orphan metrics
-    const orphanPaths: string[] = [];
-    let orphanAtomics = 0;
-    let orphanEvergreenOrDecision = 0;
+    // Calculate true orphan metrics (exclude atomics per spec §5.6.4)
+    const trueOrphanPaths: string[] = [];
+    let trueOrphans = 0;
 
     for (const notePath of notePaths) {
       const backlinks = backlinkMap.get(notePath);
       if (!backlinks || backlinks.size === 0) {
-        orphanPaths.push(notePath);
-
-        // Categorize orphans
+        // Check if this is an atomic note
         try {
           const content = await fileOps.readFile(notePath);
           const parsed = parseFrontmatter(content);
           const type = parsed.frontmatter?.type;
 
-          if (type === 'atomic') {
-            orphanAtomics++;
-          } else if (type === 'evergreen' || type === 'decision') {
-            orphanEvergreenOrDecision++;
+          // Only count non-atomic notes as true orphans
+          if (type !== 'atomic') {
+            trueOrphans++;
+            trueOrphanPaths.push(notePath);
           }
         } catch (error) {
-          // Skip
+          // If we can't read the note, conservatively count it as a true orphan
+          trueOrphans++;
+          trueOrphanPaths.push(notePath);
         }
       }
     }
@@ -260,35 +233,14 @@ export async function handleVaultHealthEnhanced(
       ? backlinkCounts.reduce((a, b) => a + b, 0) / backlinkCounts.length
       : 0;
 
-    let maxBacklinks = 0;
-    let maxBacklinksPath = '';
-    backlinkMap.forEach((backlinks, path) => {
-      if (backlinks.size > maxBacklinks) {
-        maxBacklinks = backlinks.size;
-        maxBacklinksPath = path;
-      }
-    });
-
-    const notesWithNoBacklinks = totalNotes - backlinkMap.size;
-
-    // Evergreen metrics
-    const evergreenMetrics: EvergreenMetrics = {
-      totalEvergreen: typeCounts.evergreen,
-      medianUpdateDays: median(evergreenUpdateDays),
-      staleEvergreen: staleEvergreenPaths.length,
-      staleEvergreenPaths: staleEvergreenPaths.slice(0, 10) // Limit to top 10
-    };
-
-    // Decision metrics
-    const decisionMetrics: DecisionMetrics = {
-      totalDecisions: typeCounts.decision,
-      overdueReviews: overdueDecisionPaths.length,
-      overdueDecisionPaths: overdueDecisionPaths.slice(0, 10), // Limit to top 10
-      byStatus: decisionCounts
-    };
+    // Calculate orphan percentage (spec §5.6.4: percentage of non-atomic notes that are orphans)
+    const nonAtomicNotes = totalNotes - typeCounts.atomic;
+    const orphanPercentage = nonAtomicNotes > 0
+      ? Math.round((trueOrphans / nonAtomicNotes) * 10000) / 100
+      : 0;
 
     // Optional lint hygiene sampling
-    let lintHygiene: LintHygieneMetrics | undefined;
+    let lintIssuesSampled: number | undefined;
     if (args.sampleLintHygiene) {
       const sampleSize = Math.min(args.lintSampleSize || 20, totalNotes);
       const samplePaths = notePaths
@@ -296,59 +248,75 @@ export async function handleVaultHealthEnhanced(
         .slice(0, sampleSize);
 
       let notesWithIssues = 0;
-      let totalIssues = 0;
-      const issuesBySeverity = { error: 0, warning: 0, info: 0 };
 
       for (const notePath of samplePaths) {
         try {
           const content = await fileOps.readFile(notePath);
           const lintResult = await lintMarkdown(content, { applyFixes: false });
 
-          const issues = lintResult.diagnostics.length;
-          if (issues > 0) {
+          if (lintResult.diagnostics.length > 0) {
             notesWithIssues++;
-            totalIssues += issues;
-
-            lintResult.diagnostics.forEach(d => {
-              issuesBySeverity[d.severity]++;
-            });
           }
         } catch (error) {
           // Skip
         }
       }
 
-      lintHygiene = {
-        sampleSize,
-        notesWithIssues,
-        totalIssues,
-        averageIssuesPerNote: sampleSize > 0 ? totalIssues / sampleSize : 0,
-        issuesBySeverity
-      };
+      lintIssuesSampled = notesWithIssues;
+    }
+
+    // Build VaultHealthStats
+    const stats: VaultHealthStats = {
+      totalNotes,
+      atomicNotes: typeCounts.atomic,
+      evergreenNotes: typeCounts.evergreen,
+      decisionLogs: typeCounts.decision,
+      trueOrphans,
+      orphanPercentage,
+      avgBacklinksPerNote: Math.round(averageBacklinks * 100) / 100,
+      evergreenUpdateMedianDays: evergreenUpdateDays.length > 0 ? median(evergreenUpdateDays) : undefined,
+      overdueDecisions: overdueDecisionPaths.length > 0 ? overdueDecisionPaths.length : undefined,
+      lintIssuesSampled
+    };
+
+    // Generate recommendations
+    const recommendations: string[] = [];
+
+    if (orphanPercentage > 20) {
+      recommendations.push(`High orphan rate (${orphanPercentage}%): ${trueOrphans} non-atomic notes lack backlinks. Consider connecting notes to improve knowledge graph coherence.`);
+    }
+
+    if (staleEvergreenPaths.length > 0) {
+      recommendations.push(`${staleEvergreenPaths.length} evergreen notes haven't been updated in 90+ days. Review and refresh stale evergreen content.`);
+    }
+
+    if (overdueDecisionPaths.length > 0) {
+      recommendations.push(`${overdueDecisionPaths.length} decisions have overdue review dates. Update decision statuses and review dates.`);
+    }
+
+    if (averageBacklinks < 2) {
+      recommendations.push(`Low average backlinks (${stats.avgBacklinksPerNote}). Increase note connectivity through more wikilinks.`);
+    }
+
+    if (lintIssuesSampled && lintIssuesSampled > 0) {
+      recommendations.push(`${lintIssuesSampled} notes in sample have lint issues. Consider running lint-folder to improve consistency.`);
     }
 
     return {
       status: 'ok',
       data: {
-        vault: args.vault,
-        totalNotes,
-        typeCounts,
-        orphans: {
-          totalOrphans: orphanPaths.length,
-          orphanPaths: orphanPaths.slice(0, 20), // Limit to top 20
-          orphanAtomics,
-          orphanEvergreenOrDecision
+        vault: {
+          id: args.vault,
+          name: vault.name
         },
-        backlinks: {
-          averageBacklinks: Math.round(averageBacklinks * 100) / 100,
-          maxBacklinks,
-          maxBacklinksPath,
-          notesWithNoBacklinks
-        },
-        evergreen: evergreenMetrics,
-        decisions: decisionMetrics,
-        lintHygiene,
-        timestamp: new Date().toISOString()
+        stats,
+        recommendations,
+        details: {
+          typeCounts,
+          orphanPaths: trueOrphanPaths.slice(0, 20),
+          staleEvergreenPaths: staleEvergreenPaths.slice(0, 10),
+          overdueDecisionPaths: overdueDecisionPaths.slice(0, 10)
+        }
       },
       meta: {
         tool: 'vault-health-enhanced',
