@@ -193,10 +193,22 @@ export class MarkdownLinter {
     // Check trailing whitespace
     if (this.settings.removeTrailingWhitespace) {
       lines.forEach((line, idx) => {
-        if (line.length > 0 && /\s+$/.test(line)) {
+        if (line.length > 0) {
+          const trailingSpaces = line.length - line.trimEnd().length;
+
+          // Valid: no trailing spaces or exactly 2 spaces (Markdown line break)
+          if (trailingSpaces === 0 || trailingSpaces === 2) {
+            return;
+          }
+
+          // Invalid: 1 space or 3+ spaces
+          const message = trailingSpaces === 1
+            ? 'Line has 1 trailing space (use 0 or 2 for line break)'
+            : `Line has ${trailingSpaces} trailing spaces (use 0 or 2 for line break)`;
+
           diagnostics.push({
             ruleId: 'no-trailing-whitespace',
-            message: 'Line has trailing whitespace',
+            message,
             line: idx + 1,
             severity: 'warning',
             fixable: true
@@ -247,10 +259,28 @@ export class MarkdownLinter {
     const diagnostics: LintDiagnostic[] = [];
     let fixed = content;
 
-    // Remove trailing whitespace
+    // Fix trailing whitespace
     if (this.settings.removeTrailingWhitespace) {
       const before = fixed;
-      fixed = fixed.split('\n').map(line => line.replace(/\s+$/, '')).join('\n');
+      fixed = fixed.split('\n').map(line => {
+        if (line.length === 0) return line;
+
+        const trailingSpaces = line.length - line.trimEnd().length;
+
+        // Already correct: 0 or 2 spaces (Markdown line break)
+        if (trailingSpaces === 0 || trailingSpaces === 2) {
+          return line;
+        }
+
+        // 1 space: remove it (likely accidental)
+        if (trailingSpaces === 1) {
+          return line.trimEnd();
+        }
+
+        // 3+ spaces: normalize to 2 (assume line break intent)
+        return line.trimEnd() + '  ';
+      }).join('\n');
+
       if (before !== fixed) {
         diagnostics.push({
           ruleId: 'no-trailing-whitespace',
