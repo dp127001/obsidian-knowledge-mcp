@@ -652,14 +652,14 @@ export function createServer(context: ServerContext): Server {
     },
     {
       name: 'execute-dataview-query',
-      description: 'Execute Dataview queries (MVP subset: TABLE, FROM, WHERE, SORT, LIMIT). Results are automatically limited to prevent excessive token usage. Default limits: TABLE=1000, LIST/TASK=100. Use maxResults parameter to override.',
+      description: 'Execute Dataview queries (TABLE, LIST, TASK, FROM, WHERE, SORT, LIMIT, GROUP BY, aggregations). Results default to 50 rows to prevent token exhaustion. File metadata (ctime, mtime, size, links) excluded by default.',
       inputSchema: {
         type: 'object',
         properties: {
           vault: { type: 'string', description: 'Vault ID' },
           query: {
             type: 'string',
-            description: 'Dataview Query Language (DQL) query. Supports: TABLE fields FROM source WHERE condition SORT field LIMIT n'
+            description: 'Dataview Query Language (DQL) query. Supports: TABLE fields FROM source WHERE condition SORT field LIMIT n, GROUP BY, aggregations'
           },
           format: {
             type: 'string',
@@ -668,9 +668,13 @@ export function createServer(context: ServerContext): Server {
           },
           maxResults: {
             type: 'number',
-            description: 'Maximum number of results to return. Overrides query LIMIT clause and defaults. Prevents excessive token usage. Default: 1000 for TABLE, 100 for LIST/TASK. Set lower for large vaults.',
+            description: 'Maximum results (default: 50). Use with caution - high values can exhaust conversation token limit.',
             minimum: 1,
             maximum: 5000
+          },
+          includeFileMetadata: {
+            type: 'boolean',
+            description: 'Include extended file metadata (ctime, mtime, size, outlinks, inlinks). Default: false to reduce token usage. Enable only if you need this metadata.'
           }
         },
         required: ['vault', 'query']
