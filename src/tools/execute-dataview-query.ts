@@ -48,6 +48,7 @@ export interface ExecuteDataviewQueryInput {
   vault: string;
   query: string;
   format?: 'table' | 'list' | 'task' | 'raw';
+  maxResults?: number; // Optional max results override (default: 100 for LIST/TASK, 1000 for TABLE)
 }
 
 export interface ExecuteDataviewQueryOutput {
@@ -56,6 +57,8 @@ export interface ExecuteDataviewQueryOutput {
   rows?: DataviewRow[];
   tasks?: TaskItem[];
   raw?: any;
+  resultCount: number;
+  truncated: boolean;
   queryParsed: {
     type: string;
     fields: string[];
@@ -299,10 +302,15 @@ export async function handleExecuteDataviewQuery(
       });
     }
 
-    // Apply LIMIT
+    // Apply LIMIT with defaults
+    const defaultLimit = parsed.type === 'TABLE' ? 1000 : 100;
+    const effectiveLimit = parsed.limit || args.maxResults || defaultLimit;
     let finalRows = rows;
-    if (parsed.limit && parsed.limit > 0) {
-      finalRows = rows.slice(0, parsed.limit);
+    let truncated = false;
+
+    if (effectiveLimit && effectiveLimit > 0 && rows.length > effectiveLimit) {
+      finalRows = rows.slice(0, effectiveLimit);
+      truncated = true;
     }
 
     return {
@@ -311,6 +319,8 @@ export async function handleExecuteDataviewQuery(
         resultType: 'table',
         columns: columnNames,
         rows: finalRows,
+        resultCount: finalRows.length,
+        truncated,
         queryParsed: {
           type: parsed.type,
           fields: parsed.fields,
@@ -319,7 +329,7 @@ export async function handleExecuteDataviewQuery(
           sort: parsed.sort ? `${parsed.sort.field} ${parsed.sort.direction}` : undefined,
           groupBy: parsed.groupBy,
           flatten: parsed.flatten,
-          limit: parsed.limit
+          limit: parsed.limit || (truncated ? effectiveLimit : undefined)
         }
       },
       meta: {
@@ -392,10 +402,15 @@ async function handleTaskQuery(
     });
   }
 
-  // Apply LIMIT
+  // Apply LIMIT with defaults
+  const defaultLimit = 100; // Default for TASK queries
+  const effectiveLimit = parsed.limit || args.maxResults || defaultLimit;
   let finalTasks = allTasks;
-  if (parsed.limit && parsed.limit > 0) {
-    finalTasks = allTasks.slice(0, parsed.limit);
+  let truncated = false;
+
+  if (effectiveLimit && effectiveLimit > 0 && allTasks.length > effectiveLimit) {
+    finalTasks = allTasks.slice(0, effectiveLimit);
+    truncated = true;
   }
 
   return {
@@ -403,6 +418,8 @@ async function handleTaskQuery(
     data: {
       resultType: 'task',
       tasks: finalTasks,
+      resultCount: finalTasks.length,
+      truncated,
       queryParsed: {
         type: parsed.type,
         fields: parsed.fields,
@@ -411,7 +428,7 @@ async function handleTaskQuery(
         sort: parsed.sort ? `${parsed.sort.field} ${parsed.sort.direction}` : undefined,
         groupBy: parsed.groupBy,
         flatten: parsed.flatten,
-        limit: parsed.limit
+        limit: parsed.limit || (truncated ? effectiveLimit : undefined)
       }
     },
     meta: {
@@ -518,10 +535,15 @@ function handleGroupByQuery(
     });
   }
 
-  // Apply LIMIT
+  // Apply LIMIT with defaults
+  const defaultLimit = 1000; // Default for TABLE queries
+  const effectiveLimit = parsed.limit || args.maxResults || defaultLimit;
   let finalRows = resultRows;
-  if (parsed.limit && parsed.limit > 0) {
-    finalRows = resultRows.slice(0, parsed.limit);
+  let truncated = false;
+
+  if (effectiveLimit && effectiveLimit > 0 && resultRows.length > effectiveLimit) {
+    finalRows = resultRows.slice(0, effectiveLimit);
+    truncated = true;
   }
 
   return {
@@ -530,6 +552,8 @@ function handleGroupByQuery(
       resultType: 'table',
       columns,
       rows: finalRows,
+      resultCount: finalRows.length,
+      truncated,
       queryParsed: {
         type: parsed.type,
         fields: parsed.fields,
@@ -538,7 +562,7 @@ function handleGroupByQuery(
         sort: parsed.sort ? `${parsed.sort.field} ${parsed.sort.direction}` : undefined,
         groupBy: parsed.groupBy,
         flatten: parsed.flatten,
-        limit: parsed.limit
+        limit: parsed.limit || (truncated ? effectiveLimit : undefined)
       }
     },
     meta: {

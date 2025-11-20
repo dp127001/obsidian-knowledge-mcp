@@ -333,3 +333,72 @@ describe('Integration: End-to-End Query Processing', () => {
     expect(parsed.limit).toBe(5);
   });
 });
+
+describe('Single-Line Query Parsing (Fix Verification)', () => {
+  it('should correctly parse WHERE clause in single-line query', () => {
+    const query = 'TABLE status, priority FROM "Testing" WHERE status = "active"';
+    const parsed = parseDataviewQuery(query);
+
+    expect(parsed.type).toBe('TABLE');
+    expect(parsed.fields).toEqual(['status', 'priority']);
+    expect(parsed.from?.type).toBe('simple');
+    expect(parsed.from?.source).toBe('"Testing"');
+    expect(parsed.where).toBe('status = "active"');
+  });
+
+  it('should correctly parse SORT clause in single-line query', () => {
+    const query = 'TABLE status, priority FROM "Testing" SORT priority DESC';
+    const parsed = parseDataviewQuery(query);
+
+    expect(parsed.type).toBe('TABLE');
+    expect(parsed.fields).toEqual(['status', 'priority']);
+    expect(parsed.from?.type).toBe('simple');
+    expect(parsed.from?.source).toBe('"Testing"');
+    expect(parsed.sort).toEqual({ field: 'priority', direction: 'DESC' });
+  });
+
+  it('should correctly parse LIMIT clause in single-line query', () => {
+    const query = 'TABLE file.name FROM "Testing" LIMIT 3';
+    const parsed = parseDataviewQuery(query);
+
+    expect(parsed.type).toBe('TABLE');
+    expect(parsed.fields).toEqual(['file.name']);
+    expect(parsed.from?.type).toBe('simple');
+    expect(parsed.from?.source).toBe('"Testing"');
+    expect(parsed.limit).toBe(3);
+  });
+
+  it('should correctly parse all clauses combined in single-line query', () => {
+    const query = 'TABLE status, priority FROM "Testing" WHERE status != "archived" SORT priority DESC LIMIT 5';
+    const parsed = parseDataviewQuery(query);
+
+    expect(parsed.type).toBe('TABLE');
+    expect(parsed.fields).toEqual(['status', 'priority']);
+    expect(parsed.from?.type).toBe('simple');
+    expect(parsed.from?.source).toBe('"Testing"');
+    expect(parsed.where).toBe('status != "archived"');
+    expect(parsed.sort).toEqual({ field: 'priority', direction: 'DESC' });
+    expect(parsed.limit).toBe(5);
+  });
+
+  it('should correctly parse LIST query with FROM and LIMIT', () => {
+    const query = 'LIST FROM "Testing" LIMIT 5';
+    const parsed = parseDataviewQuery(query);
+
+    expect(parsed.type).toBe('LIST');
+    expect(parsed.fields).toEqual(['file.name']); // Default for LIST
+    expect(parsed.from?.type).toBe('simple');
+    expect(parsed.from?.source).toBe('"Testing"');
+    expect(parsed.limit).toBe(5);
+  });
+
+  it('should correctly parse TASK query with FROM and WHERE', () => {
+    const query = 'TASK FROM "Testing" WHERE completed = false';
+    const parsed = parseDataviewQuery(query);
+
+    expect(parsed.type).toBe('TASK');
+    expect(parsed.from?.type).toBe('simple');
+    expect(parsed.from?.source).toBe('"Testing"');
+    expect(parsed.where).toBe('completed = false');
+  });
+});

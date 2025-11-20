@@ -39,6 +39,83 @@ export interface SortClause {
 }
 
 /**
+ * Tokenize a single-line query by DQL keywords
+ * Returns an object with clause positions
+ */
+interface QueryTokens {
+  fields: string;
+  from?: string;
+  where?: string;
+  sort?: string;
+  groupBy?: string;
+  flatten?: string;
+  limit?: string;
+}
+
+function tokenizeSingleLineQuery(queryStr: string): QueryTokens {
+  const tokens: QueryTokens = { fields: '' };
+
+  // Keywords we need to find (in order of typical appearance)
+  const keywords = ['FROM', 'WHERE', 'SORT', 'GROUP BY', 'FLATTEN', 'LIMIT'];
+
+  // Find positions of all keywords
+  interface KeywordPosition {
+    keyword: string;
+    index: number;
+  }
+
+  const positions: KeywordPosition[] = [];
+  const upperQuery = queryStr.toUpperCase();
+
+  for (const keyword of keywords) {
+    // Use regex to find whole-word matches (with space before and after)
+    const pattern = new RegExp(`\\s${keyword}\\s`, 'g');
+    let match;
+    while ((match = pattern.exec(upperQuery)) !== null) {
+      // Position is at the start of the keyword (after the space)
+      positions.push({ keyword, index: match.index + 1 });
+    }
+  }
+
+  // Sort by position
+  positions.sort((a, b) => a.index - b.index);
+
+  // Extract clauses between keyword positions
+  for (let i = 0; i < positions.length; i++) {
+    const { keyword, index } = positions[i];
+    const nextIndex = positions[i + 1]?.index ?? queryStr.length;
+
+    // Extract the clause content (skip the keyword itself)
+    const keywordEnd = index + keyword.length;
+    const clauseContent = queryStr.substring(keywordEnd, nextIndex).trim();
+
+    // Store in appropriate field
+    if (keyword === 'FROM') {
+      tokens.from = clauseContent;
+    } else if (keyword === 'WHERE') {
+      tokens.where = clauseContent;
+    } else if (keyword === 'SORT') {
+      tokens.sort = clauseContent;
+    } else if (keyword === 'GROUP BY') {
+      tokens.groupBy = clauseContent;
+    } else if (keyword === 'FLATTEN') {
+      tokens.flatten = clauseContent;
+    } else if (keyword === 'LIMIT') {
+      tokens.limit = clauseContent;
+    }
+  }
+
+  // Extract fields (everything before first keyword, or entire string if no keywords)
+  if (positions.length > 0) {
+    tokens.fields = queryStr.substring(0, positions[0].index).trim();
+  } else {
+    tokens.fields = queryStr.trim();
+  }
+
+  return tokens;
+}
+
+/**
  * Parse DQL query with advanced features
  */
 export function parseDataviewQuery(query: string): ParsedQuery {
@@ -53,64 +130,149 @@ export function parseDataviewQuery(query: string): ParsedQuery {
   let flatten: string | undefined;
   let limit: number | undefined;
 
+  // Track if we're processing a single-line query
+  let processedSingleLine = false;
+
   for (const line of lines) {
     const upperLine = line.toUpperCase();
 
-    // TABLE query (may include FROM on same line)
+    // TABLE query (may include FROM/WHERE/SORT/LIMIT on same line)
     if (upperLine.startsWith('TABLE ')) {
       type = 'TABLE';
       const remainder = line.substring(6).trim();
-      // Check if FROM is on the same line
-      const fromIndex = remainder.toUpperCase().indexOf(' FROM ');
-      if (fromIndex !== -1) {
-        fields = parseFieldList(remainder.substring(0, fromIndex).trim());
-        from = parseFromClause(remainder.substring(fromIndex + 6).trim());
-      } else {
-        fields = parseFieldList(remainder);
+
+      // Tokenize the remainder to extract all clauses
+      const tokens = tokenizeSingleLineQuery(remainder);
+
+      // Parse fields
+      fields = tokens.fields ? parseFieldList(tokens.fields) : [];
+
+      // Parse FROM if present
+      if (tokens.from) {
+        from = parseFromClause(tokens.from);
       }
+
+      // Parse WHERE if present
+      if (tokens.where) {
+        where = tokens.where;
+      }
+
+      // Parse SORT if present
+      if (tokens.sort) {
+        sort = parseSortClause(tokens.sort);
+      }
+
+      // Parse GROUP BY if present
+      if (tokens.groupBy) {
+        groupBy = tokens.groupBy.split(',').map(f => f.trim()).filter(Boolean);
+      }
+
+      // Parse FLATTEN if present
+      if (tokens.flatten) {
+        flatten = tokens.flatten;
+      }
+
+      // Parse LIMIT if present
+      if (tokens.limit) {
+        limit = parseInt(tokens.limit, 10);
+      }
+
+      processedSingleLine = true;
     }
-    // LIST query (may include FROM on same line)
+    // LIST query (may include FROM/WHERE/SORT/LIMIT on same line)
     else if (upperLine.startsWith('LIST ')) {
       type = 'LIST';
       const remainder = line.substring(5).trim();
-      // Check if FROM is on the same line
-      const fromIndex = remainder.toUpperCase().indexOf(' FROM ');
-      if (fromIndex !== -1) {
-        const fieldsStr = remainder.substring(0, fromIndex).trim();
-        fields = fieldsStr ? parseFieldList(fieldsStr) : ['file.name'];
-        from = parseFromClause(remainder.substring(fromIndex + 6).trim());
-      } else {
-        fields = remainder ? parseFieldList(remainder) : ['file.name'];
+
+      // Tokenize the remainder to extract all clauses
+      const tokens = tokenizeSingleLineQuery(remainder);
+
+      // Parse fields (default to file.name if empty)
+      fields = tokens.fields ? parseFieldList(tokens.fields) : ['file.name'];
+
+      // Parse FROM if present
+      if (tokens.from) {
+        from = parseFromClause(tokens.from);
       }
+
+      // Parse WHERE if present
+      if (tokens.where) {
+        where = tokens.where;
+      }
+
+      // Parse SORT if present
+      if (tokens.sort) {
+        sort = parseSortClause(tokens.sort);
+      }
+
+      // Parse GROUP BY if present
+      if (tokens.groupBy) {
+        groupBy = tokens.groupBy.split(',').map(f => f.trim()).filter(Boolean);
+      }
+
+      // Parse FLATTEN if present
+      if (tokens.flatten) {
+        flatten = tokens.flatten;
+      }
+
+      // Parse LIMIT if present
+      if (tokens.limit) {
+        limit = parseInt(tokens.limit, 10);
+      }
+
+      processedSingleLine = true;
     }
     // TASK query
     else if (upperLine.startsWith('TASK')) {
       type = 'TASK';
       fields = ['file.name'];
+
+      // Check if there's a remainder with clauses
+      const remainder = line.substring(4).trim();
+      if (remainder) {
+        const tokens = tokenizeSingleLineQuery(remainder);
+
+        // Parse FROM if present
+        if (tokens.from) {
+          from = parseFromClause(tokens.from);
+        }
+
+        // Parse WHERE if present
+        if (tokens.where) {
+          where = tokens.where;
+        }
+
+        // Parse LIMIT if present
+        if (tokens.limit) {
+          limit = parseInt(tokens.limit, 10);
+        }
+      }
+
+      processedSingleLine = true;
     }
-    // FROM clause (standalone line)
-    else if (upperLine.startsWith('FROM ')) {
+    // FROM clause (standalone line) - only process if not single-line query
+    else if (upperLine.startsWith('FROM ') && !processedSingleLine) {
       from = parseFromClause(line.substring(5).trim());
     }
-    // WHERE clause
-    else if (upperLine.startsWith('WHERE ')) {
+    // WHERE clause (standalone line) - only process if not single-line query
+    else if (upperLine.startsWith('WHERE ') && !processedSingleLine) {
       where = line.substring(6).trim();
     }
-    // SORT clause
-    else if (upperLine.startsWith('SORT ')) {
+    // SORT clause (standalone line) - only process if not single-line query
+    else if (upperLine.startsWith('SORT ') && !processedSingleLine) {
       sort = parseSortClause(line.substring(5).trim());
     }
-    // GROUP BY clause
-    else if (upperLine.startsWith('GROUP BY ')) {
+    // GROUP BY clause (standalone line) - only process if not single-line query
+    else if (upperLine.startsWith('GROUP BY ') && !processedSingleLine) {
       const groupFields = line.substring(9).trim();
       groupBy = groupFields.split(',').map(f => f.trim()).filter(Boolean);
     }
-    // FLATTEN clause
-    else if (upperLine.startsWith('FLATTEN ')) {
+    // FLATTEN clause (standalone line) - only process if not single-line query
+    else if (upperLine.startsWith('FLATTEN ') && !processedSingleLine) {
       flatten = line.substring(8).trim();
     }
-    // LIMIT clause
-    else if (upperLine.startsWith('LIMIT ')) {
+    // LIMIT clause (standalone line) - only process if not single-line query
+    else if (upperLine.startsWith('LIMIT ') && !processedSingleLine) {
       const limitStr = line.substring(6).trim();
       limit = parseInt(limitStr, 10);
     }
