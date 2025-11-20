@@ -401,4 +401,38 @@ describe('Single-Line Query Parsing (Fix Verification)', () => {
     expect(parsed.from?.source).toBe('"Testing"');
     expect(parsed.where).toBe('completed = false');
   });
+
+  it('should correctly parse multi-field SORT clause', () => {
+    const query = 'TABLE status, priority FROM "Testing" SORT status ASC, priority DESC';
+    const parsed = parseDataviewQuery(query);
+
+    expect(parsed.type).toBe('TABLE');
+    expect(parsed.fields).toEqual(['status', 'priority']);
+    expect(parsed.sort).toEqual([
+      { field: 'status', direction: 'ASC' },
+      { field: 'priority', direction: 'DESC' }
+    ]);
+  });
+
+  it('should correctly parse three-field SORT clause', () => {
+    const query = 'TABLE status, priority, progress SORT status ASC, priority DESC, progress DESC';
+    const parsed = parseDataviewQuery(query);
+
+    expect(parsed.type).toBe('TABLE');
+    expect(parsed.sort).toEqual([
+      { field: 'status', direction: 'ASC' },
+      { field: 'priority', direction: 'DESC' },
+      { field: 'progress', direction: 'DESC' }
+    ]);
+  });
+
+  it('should default to ASC when direction not specified in multi-field SORT', () => {
+    const query = 'TABLE status, priority SORT status, priority DESC';
+    const parsed = parseDataviewQuery(query);
+
+    expect(parsed.sort).toEqual([
+      { field: 'status', direction: 'ASC' },
+      { field: 'priority', direction: 'DESC' }
+    ]);
+  });
 });
