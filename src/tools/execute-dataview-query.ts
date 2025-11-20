@@ -19,7 +19,8 @@ import { FileOperations } from '../vault/file-operations.js';
 import { parseFrontmatter } from '../vault/frontmatter.js';
 import { ExpressionEvaluator, EvaluationContext } from '../dataview/expression-evaluator.js';
 import { AggregationEngine, parseAggregateFunction, isAggregateFunction } from '../dataview/aggregation.js';
-import { parseDataviewQuery, matchesFromClause, applyFlatten } from '../dataview/query-parser.js';
+import { parseDataviewQuery, matchesFromClause, applyFlatten, parseFieldSpec } from '../dataview/query-parser.js';
+import { extractWikilinks } from '../search/regex-helpers.js';
 
 export interface DataviewRow {
   file: NoteRef & {
@@ -27,8 +28,19 @@ export interface DataviewRow {
     ctime?: string | null;
     mtime?: string | null;
     size?: number | null;
+    outlinks?: string[];
   };
   fields: Record<string, any>;
+}
+
+export interface TaskItem {
+  file: NoteRef & {
+    title: string;
+  };
+  line: number;
+  text: string;
+  completed: boolean;
+  tags?: string[];
 }
 
 export interface ExecuteDataviewQueryInput {
@@ -41,6 +53,7 @@ export interface ExecuteDataviewQueryOutput {
   resultType: 'table' | 'list' | 'task' | 'raw';
   columns?: string[];
   rows?: DataviewRow[];
+  tasks?: TaskItem[];
   raw?: any;
   queryParsed: {
     type: string;
@@ -124,6 +137,10 @@ export async function handleExecuteDataviewQuery(
           // File stats unavailable, continue with null values
         }
 
+        // Extract wikilinks (for file.outlinks support)
+        const wikilinks = extractWikilinks(content);
+        const outlinks = wikilinks.map(link => link.target);
+
         // Build row object
         const row: DataviewRow = {
           file: {
@@ -132,7 +149,8 @@ export async function handleExecuteDataviewQuery(
             title,
             ctime: fileStats?.created || null,
             mtime: fileStats?.modified || null,
-            size: fileStats?.sizeBytes || null
+            size: fileStats?.sizeBytes || null,
+            outlinks
           },
           fields: frontmatter || {}
         };
@@ -160,7 +178,8 @@ export async function handleExecuteDataviewQuery(
               ext: 'md',
               ctime: row.file.ctime || null,
               mtime: row.file.mtime || null,
-              size: row.file.size || null
+              size: row.file.size || null,
+              outlinks: row.file.outlinks || []
             }
           };
           const result = evaluator.evaluate(parsed.where!, context);
@@ -172,6 +191,11 @@ export async function handleExecuteDataviewQuery(
       });
     }
 
+    // Handle TASK queries
+    if (parsed.type === 'TASK') {
+      return await handleTaskQuery(args, parsed, rows, fileOps);
+    }
+
     // Apply FLATTEN
     if (parsed.flatten) {
       rows = applyFlatten(rows, parsed.flatten) as DataviewRow[];
@@ -181,6 +205,10 @@ export async function handleExecuteDataviewQuery(
     if (parsed.groupBy && parsed.groupBy.length > 0) {
       return handleGroupByQuery(args, parsed, rows);
     }
+
+    // Parse field specifications with aliases
+    const fieldSpecs = parsed.fields.map(f => parseFieldSpec(f));
+    const columnNames = fieldSpecs.map(spec => spec.alias || spec.expression);
 
     // Extract field values for non-aggregated queries
     const evaluator = new ExpressionEvaluator();
@@ -196,18 +224,21 @@ export async function handleExecuteDataviewQuery(
           ext: 'md',
           ctime: row.file.ctime || null,
           mtime: row.file.mtime || null,
-          size: row.file.size || null
+          size: row.file.size || null,
+          outlinks: row.file.outlinks || []
         }
       };
 
       // Extract each field using expression evaluator
       const newFields: Record<string, any> = {};
-      for (const fieldSpec of parsed.fields) {
+      for (let i = 0; i < fieldSpecs.length; i++) {
+        const spec = fieldSpecs[i];
+        const columnName = columnNames[i];
         try {
-          const value = extractField(fieldSpec, context, evaluator);
-          newFields[fieldSpec] = value;
+          const value = extractField(spec.expression, context, evaluator);
+          newFields[columnName] = value;
         } catch {
-          newFields[fieldSpec] = null;
+          newFields[columnName] = null;
         }
       }
       row.fields = newFields;
@@ -237,7 +268,7 @@ export async function handleExecuteDataviewQuery(
       status: 'ok',
       data: {
         resultType: 'table',
-        columns: parsed.fields,
+        columns: columnNames,
         rows: finalRows,
         queryParsed: {
           type: parsed.type,
@@ -266,6 +297,88 @@ export async function handleExecuteDataviewQuery(
       }
     };
   }
+}
+
+/**
+ * Handle TASK queries
+ */
+async function handleTaskQuery(
+  args: ExecuteDataviewQueryInput,
+  parsed: ReturnType<typeof parseDataviewQuery>,
+  rows: DataviewRow[],
+  fileOps: FileOperations
+): Promise<ToolResponse<ExecuteDataviewQueryOutput>> {
+  let allTasks: TaskItem[] = [];
+
+  // Extract tasks from each file in the filtered rows
+  for (const row of rows) {
+    try {
+      const content = await fileOps.readFile(row.file.path);
+      const tasks = extractTasks(content, row.file.vault, row.file.path, row.file.title);
+      allTasks.push(...tasks);
+    } catch (error) {
+      // Skip files that fail to read
+      continue;
+    }
+  }
+
+  // Apply WHERE filter on tasks if specified
+  if (parsed.where) {
+    const evaluator = new ExpressionEvaluator();
+    allTasks = allTasks.filter(task => {
+      try {
+        // Build context for task evaluation
+        const context: EvaluationContext = {
+          frontmatter: {
+            text: task.text,
+            completed: task.completed,
+            tags: task.tags || []
+          },
+          file: {
+            path: task.file.path,
+            name: task.file.title,
+            folder: task.file.path.includes('/')
+              ? task.file.path.substring(0, task.file.path.lastIndexOf('/'))
+              : '',
+            ext: 'md'
+          }
+        };
+        const result = evaluator.evaluate(parsed.where!, context);
+        return Boolean(result);
+      } catch (error) {
+        return false;
+      }
+    });
+  }
+
+  // Apply LIMIT
+  let finalTasks = allTasks;
+  if (parsed.limit && parsed.limit > 0) {
+    finalTasks = allTasks.slice(0, parsed.limit);
+  }
+
+  return {
+    status: 'ok',
+    data: {
+      resultType: 'task',
+      tasks: finalTasks,
+      queryParsed: {
+        type: parsed.type,
+        fields: parsed.fields,
+        from: parsed.from ? JSON.stringify(parsed.from) : undefined,
+        where: parsed.where,
+        sort: parsed.sort ? `${parsed.sort.field} ${parsed.sort.direction}` : undefined,
+        groupBy: parsed.groupBy,
+        flatten: parsed.flatten,
+        limit: parsed.limit
+      }
+    },
+    meta: {
+      tool: 'execute-dataview-query',
+      vault: args.vault,
+      timestamp: new Date().toISOString()
+    }
+  };
 }
 
 /**
@@ -395,6 +508,9 @@ function extractField(
   if (spec === 'file.size') {
     return context.file.size;
   }
+  if (spec === 'file.outlinks') {
+    return (context.file as any).outlinks || [];
+  }
 
   // Try to evaluate as expression (supports functions, property access, etc.)
   try {
@@ -406,4 +522,43 @@ function extractField(
     }
     return null;
   }
+}
+
+/**
+ * Extract task items from markdown content
+ */
+function extractTasks(content: string, vault: string, path: string, title: string): TaskItem[] {
+  const tasks: TaskItem[] = [];
+  const lines = content.split('\n');
+
+  // Task pattern: - [ ] or - [x] or - [X]
+  const taskPattern = /^(\s*)-\s+\[([ xX])\]\s+(.+)$/;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = taskPattern.exec(line);
+
+    if (match) {
+      const completed = match[2].toLowerCase() === 'x';
+      const text = match[3].trim();
+
+      // Extract inline tags from task text
+      const tagPattern = /#[\w-/]+/g;
+      const tags = text.match(tagPattern) || [];
+
+      tasks.push({
+        file: {
+          vault,
+          path,
+          title
+        },
+        line: i + 1, // 1-indexed line number
+        text,
+        completed,
+        tags: tags.length > 0 ? tags : undefined
+      });
+    }
+  }
+
+  return tasks;
 }

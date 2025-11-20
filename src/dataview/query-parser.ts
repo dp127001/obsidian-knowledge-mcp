@@ -125,6 +125,41 @@ export function parseDataviewQuery(query: string): ParsedQuery {
 }
 
 /**
+ * Parse field specification with optional alias
+ * Examples:
+ *   "status" -> { expression: "status", alias: null }
+ *   "status AS \"Current Status\"" -> { expression: "status", alias: "Current Status" }
+ *   "length(file.outlinks) AS \"Links\"" -> { expression: "length(file.outlinks)", alias: "Links" }
+ */
+export interface FieldSpec {
+  expression: string;
+  alias: string | null;
+}
+
+export function parseFieldSpec(fieldStr: string): FieldSpec {
+  const trimmed = fieldStr.trim();
+
+  // Check for AS clause (case-insensitive)
+  const asMatch = trimmed.match(/^(.+?)\s+AS\s+(.+)$/i);
+
+  if (asMatch) {
+    let expression = asMatch[1].trim();
+    let alias = asMatch[2].trim();
+
+    // Remove quotes from alias if present
+    if ((alias.startsWith('"') && alias.endsWith('"')) ||
+        (alias.startsWith("'") && alias.endsWith("'"))) {
+      alias = alias.substring(1, alias.length - 1);
+    }
+
+    return { expression, alias };
+  }
+
+  // No alias
+  return { expression: trimmed, alias: null };
+}
+
+/**
  * Parse field list (supports "field1, field2, field3")
  */
 function parseFieldList(fieldsStr: string): string[] {

@@ -31,16 +31,41 @@ export class DataviewFunctions {
 
     /**
      * date(input) - Parse a date from string, number, or Date object
+     * Special values: "today", "tomorrow", "yesterday", "now"
      */
     this.functions.set('date', (input: ExpressionValue) => {
       if (input instanceof Date) return input;
+
       if (typeof input === 'string') {
+        const lower = input.toLowerCase();
+        const now = new Date();
+
+        // Handle special date keywords
+        if (lower === 'today') {
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          return today;
+        }
+        if (lower === 'tomorrow') {
+          const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+          return tomorrow;
+        }
+        if (lower === 'yesterday') {
+          const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+          return yesterday;
+        }
+        if (lower === 'now') {
+          return now;
+        }
+
+        // Regular date parsing
         const parsed = new Date(input);
         return isNaN(parsed.getTime()) ? null : parsed;
       }
+
       if (typeof input === 'number') {
         return new Date(input);
       }
+
       return null;
     });
 
@@ -78,16 +103,20 @@ export class DataviewFunctions {
 
     /**
      * dur(input) - Parse duration (simplified - returns seconds)
-     * Accepts: "1d", "2h", "30m", "45s" or combinations like "1d 2h"
+     * Accepts:
+     *   - Short form: "1d", "2h", "30m", "45s"
+     *   - Long form: "7 days", "2 weeks", "30 minutes", "45 seconds"
+     *   - Combinations: "1d 2h", "2 weeks 3 days"
      */
     this.functions.set('dur', (input: ExpressionValue) => {
       if (typeof input !== 'string') return 0;
 
       const patterns = [
-        { regex: /(\d+)d/g, multiplier: 86400 }, // days
-        { regex: /(\d+)h/g, multiplier: 3600 },  // hours
-        { regex: /(\d+)m/g, multiplier: 60 },    // minutes
-        { regex: /(\d+)s/g, multiplier: 1 }      // seconds
+        { regex: /(\d+)\s*(?:weeks?|w)/gi, multiplier: 604800 },   // weeks
+        { regex: /(\d+)\s*(?:days?|d)/gi, multiplier: 86400 },     // days
+        { regex: /(\d+)\s*(?:hours?|hrs?|h)/gi, multiplier: 3600 }, // hours
+        { regex: /(\d+)\s*(?:minutes?|mins?|m)/gi, multiplier: 60 }, // minutes
+        { regex: /(\d+)\s*(?:seconds?|secs?|s)/gi, multiplier: 1 }  // seconds
       ];
 
       let totalSeconds = 0;

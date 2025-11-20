@@ -23,6 +23,8 @@ export interface EvaluationContext {
     ctime?: Date | string | null;
     mtime?: Date | string | null;
     size?: number | null;
+    outlinks?: string[];
+    inlinks?: string[];
   };
   body?: string;
 }
@@ -488,8 +490,20 @@ export class ExpressionEvaluator {
       case '>=':
         return this.compareEqual(leftVal, rightVal) || this.compareLessThan(rightVal, leftVal);
       case '+':
+        // Date + seconds
+        if (leftVal instanceof Date && typeof rightVal === 'number') {
+          return new Date(leftVal.getTime() + rightVal * 1000);
+        }
         return (leftVal as number) + (rightVal as number);
       case '-':
+        // Date - seconds (from dur())
+        if (leftVal instanceof Date && typeof rightVal === 'number') {
+          return new Date(leftVal.getTime() - rightVal * 1000);
+        }
+        // Date - Date (returns difference in seconds)
+        if (leftVal instanceof Date && rightVal instanceof Date) {
+          return (leftVal.getTime() - rightVal.getTime()) / 1000;
+        }
         return (leftVal as number) - (rightVal as number);
       case '*':
         return (leftVal as number) * (rightVal as number);
