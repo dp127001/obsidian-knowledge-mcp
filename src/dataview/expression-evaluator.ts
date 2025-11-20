@@ -11,7 +11,17 @@
 
 import { DataviewFunctions } from './functions.js';
 
-export type ExpressionValue = string | number | boolean | null | Date | any[] | Record<string, any>;
+/**
+ * Lambda function representation
+ */
+export interface LambdaFunction {
+  type: 'lambda';
+  parameter: string;
+  body: ExpressionNode;
+  evaluator: ExpressionEvaluator;
+}
+
+export type ExpressionValue = string | number | boolean | null | Date | any[] | Record<string, any> | LambdaFunction;
 
 export interface EvaluationContext {
   frontmatter: Record<string, any> | null;
@@ -39,7 +49,8 @@ export type ExpressionNode =
   | { type: 'binary'; operator: string; left: ExpressionNode; right: ExpressionNode }
   | { type: 'logical'; operator: 'AND' | 'OR'; left: ExpressionNode; right: ExpressionNode }
   | { type: 'unary'; operator: string; argument: ExpressionNode }
-  | { type: 'function'; name: string; arguments: ExpressionNode[] };
+  | { type: 'function'; name: string; arguments: ExpressionNode[] }
+  | { type: 'lambda'; parameter: string; body: ExpressionNode };
 
 /**
  * Tokenize expression string
@@ -100,7 +111,7 @@ function tokenize(expr: string): Token[] {
     // Operators (multi-character first)
     if (i + 1 < expr.length) {
       const twoChar = expr.substring(i, i + 2);
-      if (['==', '!=', '<=', '>=', '&&', '||'].includes(twoChar)) {
+      if (['==', '!=', '<=', '>=', '&&', '||', '=>'].includes(twoChar)) {
         tokens.push({ type: 'operator', value: twoChar, position: i });
         i += 2;
         continue;
@@ -312,9 +323,32 @@ class ExpressionParser {
       throw new Error('Unexpected end of expression');
     }
 
-    // Parenthesized expression
+    // Lambda expression or parenthesized expression
     if (token.type === 'punctuation' && token.value === '(') {
-      this.consume();
+      // Look ahead to determine if this is a lambda
+      const savedPosition = this.position;
+      this.consume(); // (
+
+      // Check for lambda pattern: (identifier) =>
+      const nextToken = this.peek();
+      if (nextToken?.type === 'identifier') {
+        const paramName = nextToken.value;
+        this.consume(); // identifier
+        const closeToken = this.peek();
+        if (closeToken?.type === 'punctuation' && closeToken.value === ')') {
+          this.consume(); // )
+          const arrowToken = this.peek();
+          if (arrowToken?.type === 'operator' && arrowToken.value === '=>') {
+            this.consume(); // =>
+            const body = this.parseLogicalOr();
+            return { type: 'lambda', parameter: paramName, body };
+          }
+        }
+      }
+
+      // Not a lambda, restore position and parse as parenthesized expression
+      this.position = savedPosition;
+      this.consume(); // (
       const expr = this.parseLogicalOr();
       this.expect('punctuation', ')');
       return expr;
@@ -429,9 +463,33 @@ export class ExpressionEvaluator {
       case 'function':
         return this.evaluateFunction(node.name, node.arguments, context);
 
+      case 'lambda':
+        // Return a lambda function object that can be called later
+        return {
+          type: 'lambda',
+          parameter: node.parameter,
+          body: node.body,
+          evaluator: this
+        };
+
       default:
         throw new Error(`Unknown node type: ${(node as any).type}`);
     }
+  }
+
+  /**
+   * Evaluate a lambda function with a given parameter value
+   */
+  evaluateLambda(lambda: LambdaFunction, paramValue: ExpressionValue, context: EvaluationContext): ExpressionValue {
+    // Create a new context with the lambda parameter bound
+    const lambdaContext: EvaluationContext = {
+      ...context,
+      frontmatter: {
+        ...(context.frontmatter || {}),
+        [lambda.parameter]: paramValue
+      }
+    };
+    return this.evaluateNode(lambda.body, lambdaContext);
   }
 
   private resolveIdentifier(name: string, context: EvaluationContext): ExpressionValue {

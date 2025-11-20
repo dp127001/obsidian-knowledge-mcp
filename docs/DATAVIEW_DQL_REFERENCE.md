@@ -13,10 +13,10 @@ The `execute-dataview-query` MCP tool implements a comprehensive subset of Datav
 - FLATTEN for array expansion
 - SORT with ASC/DESC
 - LIMIT clause
+- Lambda expressions in map()/filter() functions
 
 **⚠️ Not Implemented (Future):**
 - DataviewJS (inline JavaScript)
-- Full lambda expressions in map()/filter()
 - Implicit field extraction from markdown content
 - Live query updates
 - Task-specific queries (TASK returns file names only)
@@ -189,6 +189,14 @@ TABLE sort(numbers, "desc")
 
 -- Reverse array
 TABLE reverse(list)
+
+-- Filter array with lambda (NEW!)
+TABLE filter(tags, (t) => contains(t, "project"))
+WHERE length(filter(numbers, (n) => n > 10)) > 0
+
+-- Map array with lambda (NEW!)
+TABLE map(items, (x) => x.name)
+TABLE map(numbers, (n) => n * 2)
 ```
 
 ### String Functions
@@ -536,25 +544,18 @@ WHERE contains(tags, "important") AND length(file.name) > 5
 ### Not Implemented
 
 1. **DataviewJS**: Inline JavaScript execution not supported
-2. **Lambda Expressions**: `map()` and `filter()` don't support lambda syntax yet
-   ```sql
-   -- NOT SUPPORTED YET
-   TABLE map(tasks, (t) => t.text)
-   ```
-3. **Implicit Fields**: Cannot query markdown content directly (only frontmatter)
+2. **Implicit Fields**: Cannot query markdown content directly (only frontmatter)
    ```sql
    -- NOT SUPPORTED
    WHERE file.tasks.length > 0
    ```
-4. **Complex Date Arithmetic**: No date addition/subtraction
+3. **Complex Date Arithmetic**: No date addition/subtraction
    ```sql
    -- NOT SUPPORTED
    WHERE date(today) - date(created) < dur("7d")
    ```
 
 ### Workarounds
-
-**For lambdas**: Use multiple queries or extract to frontmatter
 
 **For date arithmetic**: Use explicit date comparisons
 ```sql

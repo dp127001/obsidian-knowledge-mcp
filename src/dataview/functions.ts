@@ -8,7 +8,7 @@
  * - Object functions: default()
  */
 
-import { ExpressionValue } from './expression-evaluator.js';
+import { ExpressionValue, LambdaFunction } from './expression-evaluator.js';
 
 export class DataviewFunctions {
   private functions: Map<string, (...args: ExpressionValue[]) => ExpressionValue>;
@@ -202,22 +202,65 @@ export class DataviewFunctions {
     });
 
     /**
-     * filter(array, predicate) - Filter array (simplified - not full lambda support)
-     * For now, just returns the array as-is
+     * filter(array, predicate) - Filter array using a lambda predicate
+     * Usage: filter(array, (x) => x > 5)
      */
-    this.functions.set('filter', (array: ExpressionValue, _predicate?: ExpressionValue) => {
+    this.functions.set('filter', (array: ExpressionValue, predicate?: ExpressionValue) => {
       if (!Array.isArray(array)) return array;
-      // TODO: Full lambda support in future version
+      if (!predicate) return array;
+
+      // Check if predicate is a lambda function
+      if (typeof predicate === 'object' && predicate !== null && 'type' in predicate && predicate.type === 'lambda') {
+        const lambda = predicate as LambdaFunction;
+        const filtered: any[] = [];
+
+        for (const item of array) {
+          // Evaluate lambda with current item
+          const result = lambda.evaluator.evaluateLambda(lambda, item, {
+            frontmatter: null,
+            file: { path: '', name: '', folder: '', ext: '' }
+          });
+
+          // Add item if predicate returns truthy value
+          if (result) {
+            filtered.push(item);
+          }
+        }
+
+        return filtered;
+      }
+
+      // If not a lambda, return array as-is
       return array;
     });
 
     /**
-     * map(array, transform) - Map array (simplified - not full lambda support)
-     * For now, just returns the array as-is
+     * map(array, transform) - Map array using a lambda transform function
+     * Usage: map(array, (x) => x.name)
      */
-    this.functions.set('map', (array: ExpressionValue, _transform?: ExpressionValue) => {
+    this.functions.set('map', (array: ExpressionValue, transform?: ExpressionValue) => {
       if (!Array.isArray(array)) return array;
-      // TODO: Full lambda support in future version
+      if (!transform) return array;
+
+      // Check if transform is a lambda function
+      if (typeof transform === 'object' && transform !== null && 'type' in transform && transform.type === 'lambda') {
+        const lambda = transform as LambdaFunction;
+        const mapped: any[] = [];
+
+        for (const item of array) {
+          // Evaluate lambda with current item
+          const result = lambda.evaluator.evaluateLambda(lambda, item, {
+            frontmatter: null,
+            file: { path: '', name: '', folder: '', ext: '' }
+          });
+
+          mapped.push(result);
+        }
+
+        return mapped;
+      }
+
+      // If not a lambda, return array as-is
       return array;
     });
 
