@@ -43,6 +43,10 @@ import { handleRebuildIndex } from './tools/rebuild-index.js';
 import { handleVerifyDatabase } from './tools/verify-database.js';
 import { handleBatchOperations } from './tools/batch-operations.js';
 import { handleExecuteDataviewQuery } from './tools/execute-dataview-query.js';
+import { handleFindSimilarNotes } from './tools/find-similar-notes.js';
+import { handleFindByConcept } from './tools/find-by-concept.js';
+import { handleFindConceptVariations } from './tools/find-concept-variations.js';
+import { handleGetActivityTimeline } from './tools/get-activity-timeline.js';
 
 /**
  * MCP Server context
@@ -631,6 +635,64 @@ export function createServer(context: ServerContext): Server {
         },
         required: ['vault', 'query']
       }
+    },
+    {
+      name: 'find-similar-notes',
+      description: 'Find notes similar to a given note using tag, concept, and term similarity',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          path: { type: 'string', description: 'Anchor note path' },
+          limit: { type: 'number', description: 'Max similar notes to return (default: 10)' },
+          includeSharedTerms: { type: 'boolean', description: 'Include shared terms in results (default: false)' }
+        },
+        required: ['vault', 'path']
+      }
+    },
+    {
+      name: 'find-by-concept',
+      description: 'Find notes associated with a specific concept',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          concept: { type: 'string', description: 'Concept term to search for' },
+          limit: { type: 'number', description: 'Max notes to return (default: 50)' }
+        },
+        required: ['vault', 'concept']
+      }
+    },
+    {
+      name: 'find-concept-variations',
+      description: 'Find all term variations for a given concept',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          concept: { type: 'string', description: 'Concept term to find variations for' }
+        },
+        required: ['vault', 'concept']
+      }
+    },
+    {
+      name: 'get-activity-timeline',
+      description: 'Get timeline of note activity from provenance history',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          vault: { type: 'string', description: 'Vault ID' },
+          startDate: { type: 'string', description: 'Start date (ISO format, optional)' },
+          endDate: { type: 'string', description: 'End date (ISO format, optional)' },
+          limit: { type: 'number', description: 'Max events to return (default: 1000)' },
+          groupBy: {
+            type: 'string',
+            enum: ['day', 'event'],
+            description: 'Group results by day or return individual events (default: day)'
+          }
+        },
+        required: ['vault']
+      }
     }
   ];
 
@@ -757,6 +819,22 @@ export function createServer(context: ServerContext): Server {
 
         case 'execute-dataview-query':
           result = await handleExecuteDataviewQuery(context, (args || {}) as any);
+          break;
+
+        case 'find-similar-notes':
+          result = await handleFindSimilarNotes(context, (args || {}) as any);
+          break;
+
+        case 'find-by-concept':
+          result = await handleFindByConcept(context, (args || {}) as any);
+          break;
+
+        case 'find-concept-variations':
+          result = await handleFindConceptVariations(context, (args || {}) as any);
+          break;
+
+        case 'get-activity-timeline':
+          result = await handleGetActivityTimeline(context, (args || {}) as any);
           break;
 
         default:
