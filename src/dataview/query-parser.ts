@@ -12,7 +12,7 @@ export interface ParsedQuery {
   fields: string[];
   from?: FromClause;
   where?: string;
-  sort?: SortClause;
+  sort?: SortClauses;
   groupBy?: string[];
   flatten?: string;
   limit?: number;
@@ -37,6 +37,8 @@ export interface SortClause {
   field: string;
   direction: 'ASC' | 'DESC';
 }
+
+export type SortClauses = SortClause[];
 
 /**
  * Tokenize a single-line query by DQL keywords
@@ -125,7 +127,7 @@ export function parseDataviewQuery(query: string): ParsedQuery {
   let fields: string[] = [];
   let from: FromClause | undefined;
   let where: string | undefined;
-  let sort: SortClause | undefined;
+  let sort: SortClauses | undefined;
   let groupBy: string[] | undefined;
   let flatten: string | undefined;
   let limit: number | undefined;
@@ -398,13 +400,26 @@ function parseFromSource(sourceStr: string): FromSource {
 }
 
 /**
- * Parse SORT clause
+ * Parse SORT clause with support for multiple fields
+ * Examples:
+ *   "status ASC" -> [{ field: "status", direction: "ASC" }]
+ *   "status ASC, priority DESC" -> [{ field: "status", direction: "ASC" }, { field: "priority", direction: "DESC" }]
+ *   "status, priority DESC, due" -> [{ field: "status", direction: "ASC" }, { field: "priority", direction: "DESC" }, { field: "due", direction: "ASC" }]
  */
-function parseSortClause(sortStr: string): SortClause {
-  const parts = sortStr.split(/\s+/);
-  const field = parts[0];
-  const direction = parts[1]?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-  return { field, direction };
+function parseSortClause(sortStr: string): SortClauses {
+  const clauses: SortClauses = [];
+
+  // Split by comma to get individual sort fields
+  const fields = sortStr.split(',').map(f => f.trim()).filter(Boolean);
+
+  for (const fieldSpec of fields) {
+    const parts = fieldSpec.split(/\s+/);
+    const field = parts[0];
+    const direction = parts[1]?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+    clauses.push({ field, direction });
+  }
+
+  return clauses;
 }
 
 /**
@@ -439,14 +454,18 @@ function matchesFromSource(
 ): boolean {
   let matches = false;
 
+  // Normalize path separators to forward slashes for cross-platform compatibility
+  const normalizedPath = path.replace(/\\/g, '/');
+  const normalizedSource = source.value.replace(/\\/g, '/');
+
   if (source.type === 'tag') {
     const tags = frontmatter?.tags || [];
     const tagArray = Array.isArray(tags) ? tags : [tags];
-    matches = tagArray.some((t: string) => t === source.value || t.startsWith(source.value + '/'));
+    matches = tagArray.some((t: string) => t === normalizedSource || t.startsWith(normalizedSource + '/'));
   } else if (source.type === 'folder') {
-    matches = path.startsWith(source.value + '/') || path.startsWith(source.value);
+    matches = normalizedPath.startsWith(normalizedSource + '/') || normalizedPath.startsWith(normalizedSource);
   } else if (source.type === 'file') {
-    matches = path === source.value || path.endsWith('/' + source.value);
+    matches = normalizedPath === normalizedSource || normalizedPath.endsWith('/' + normalizedSource);
   }
 
   // Apply negation

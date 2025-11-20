@@ -288,17 +288,32 @@ export async function handleExecuteDataviewQuery(
       row.fields = newFields;
     }
 
-    // Apply SORT
-    if (parsed.sort) {
+    // Apply SORT with multi-field support
+    if (parsed.sort && parsed.sort.length > 0) {
       rows.sort((a, b) => {
-        const aVal = a.fields[parsed.sort!.field];
-        const bVal = b.fields[parsed.sort!.field];
+        // Compare each sort field in order until we find a difference
+        for (const sortClause of parsed.sort!) {
+          const aVal = a.fields[sortClause.field];
+          const bVal = b.fields[sortClause.field];
 
-        let cmp = 0;
-        if (aVal < bVal) cmp = -1;
-        else if (aVal > bVal) cmp = 1;
+          let cmp = 0;
+          if (aVal === null || aVal === undefined) {
+            cmp = bVal === null || bVal === undefined ? 0 : 1;
+          } else if (bVal === null || bVal === undefined) {
+            cmp = -1;
+          } else if (aVal < bVal) {
+            cmp = -1;
+          } else if (aVal > bVal) {
+            cmp = 1;
+          }
 
-        return parsed.sort!.direction === 'DESC' ? -cmp : cmp;
+          // If values are different, apply direction and return
+          if (cmp !== 0) {
+            return sortClause.direction === 'DESC' ? -cmp : cmp;
+          }
+          // If values are equal, continue to next sort field
+        }
+        return 0; // All sort fields are equal
       });
     }
 
@@ -316,7 +331,7 @@ export async function handleExecuteDataviewQuery(
     return {
       status: 'ok',
       data: {
-        resultType: 'table',
+        resultType: parsed.type.toLowerCase() as 'table' | 'list' | 'task',
         columns: columnNames,
         rows: finalRows,
         resultCount: finalRows.length,
@@ -326,7 +341,9 @@ export async function handleExecuteDataviewQuery(
           fields: parsed.fields,
           from: parsed.from ? JSON.stringify(parsed.from) : undefined,
           where: parsed.where,
-          sort: parsed.sort ? `${parsed.sort.field} ${parsed.sort.direction}` : undefined,
+          sort: parsed.sort && parsed.sort.length > 0
+            ? parsed.sort.map(s => `${s.field} ${s.direction}`).join(', ')
+            : undefined,
           groupBy: parsed.groupBy,
           flatten: parsed.flatten,
           limit: parsed.limit || (truncated ? effectiveLimit : undefined)
@@ -425,7 +442,9 @@ async function handleTaskQuery(
         fields: parsed.fields,
         from: parsed.from ? JSON.stringify(parsed.from) : undefined,
         where: parsed.where,
-        sort: parsed.sort ? `${parsed.sort.field} ${parsed.sort.direction}` : undefined,
+        sort: parsed.sort && parsed.sort.length > 0
+          ? parsed.sort.map(s => `${s.field} ${s.direction}`).join(', ')
+          : undefined,
         groupBy: parsed.groupBy,
         flatten: parsed.flatten,
         limit: parsed.limit || (truncated ? effectiveLimit : undefined)
@@ -521,17 +540,32 @@ function handleGroupByQuery(
     ...rowsFields.map(spec => spec.alias || spec.expression)
   ];
 
-  // Apply SORT
-  if (parsed.sort) {
+  // Apply SORT with multi-field support
+  if (parsed.sort && parsed.sort.length > 0) {
     resultRows.sort((a, b) => {
-      const aVal = a.fields[parsed.sort!.field];
-      const bVal = b.fields[parsed.sort!.field];
+      // Compare each sort field in order until we find a difference
+      for (const sortClause of parsed.sort!) {
+        const aVal = a.fields[sortClause.field];
+        const bVal = b.fields[sortClause.field];
 
-      let cmp = 0;
-      if (aVal < bVal) cmp = -1;
-      else if (aVal > bVal) cmp = 1;
+        let cmp = 0;
+        if (aVal === null || aVal === undefined) {
+          cmp = bVal === null || bVal === undefined ? 0 : 1;
+        } else if (bVal === null || bVal === undefined) {
+          cmp = -1;
+        } else if (aVal < bVal) {
+          cmp = -1;
+        } else if (aVal > bVal) {
+          cmp = 1;
+        }
 
-      return parsed.sort!.direction === 'DESC' ? -cmp : cmp;
+        // If values are different, apply direction and return
+        if (cmp !== 0) {
+          return sortClause.direction === 'DESC' ? -cmp : cmp;
+        }
+        // If values are equal, continue to next sort field
+      }
+      return 0; // All sort fields are equal
     });
   }
 
@@ -559,7 +593,9 @@ function handleGroupByQuery(
         fields: parsed.fields,
         from: parsed.from ? JSON.stringify(parsed.from) : undefined,
         where: parsed.where,
-        sort: parsed.sort ? `${parsed.sort.field} ${parsed.sort.direction}` : undefined,
+        sort: parsed.sort && parsed.sort.length > 0
+          ? parsed.sort.map(s => `${s.field} ${s.direction}`).join(', ')
+          : undefined,
         groupBy: parsed.groupBy,
         flatten: parsed.flatten,
         limit: parsed.limit || (truncated ? effectiveLimit : undefined)
