@@ -12,6 +12,9 @@ dist/
 .env
 .env.local
 
+# Configuration
+mcp-config.json
+
 # Database
 *.db
 *.db-shm
