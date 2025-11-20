@@ -70,12 +70,18 @@ function tokenizeSingleLineQuery(queryStr: string): QueryTokens {
   const upperQuery = queryStr.toUpperCase();
 
   for (const keyword of keywords) {
-    // Use regex to find whole-word matches (with space before and after)
-    const pattern = new RegExp(`\\s${keyword}\\s`, 'g');
+    // Use regex to find whole-word matches (at start/end or with spaces)
+    // Pattern matches: start-of-string OR space, then keyword, then space OR end-of-string
+    const pattern = new RegExp(`(^|\\s)(${keyword})(\\s|$)`, 'gi');
     let match;
     while ((match = pattern.exec(upperQuery)) !== null) {
-      // Position is at the start of the keyword (after the space)
-      positions.push({ keyword, index: match.index + 1 });
+      // Position is at the start of the keyword
+      // match.index points to the start of the whole match (including leading space if any)
+      // match[1] is the leading boundary (^ or space)
+      // If match[1] is empty (^), keyword starts at match.index
+      // If match[1] is a space, keyword starts at match.index + 1
+      const keywordStart = match[1] === '' ? match.index : match.index + 1;
+      positions.push({ keyword, index: keywordStart });
     }
   }
 
@@ -179,7 +185,11 @@ export function parseDataviewQuery(query: string): ParsedQuery {
         limit = parseInt(tokens.limit, 10);
       }
 
-      processedSingleLine = true;
+      // Only set processedSingleLine if we found clauses on the same line
+      // This allows multi-line queries to work correctly
+      if (tokens.from || tokens.where || tokens.sort || tokens.groupBy || tokens.flatten || tokens.limit) {
+        processedSingleLine = true;
+      }
     }
     // LIST query (may include FROM/WHERE/SORT/LIMIT on same line)
     else if (upperLine.startsWith('LIST ')) {
@@ -222,7 +232,11 @@ export function parseDataviewQuery(query: string): ParsedQuery {
         limit = parseInt(tokens.limit, 10);
       }
 
-      processedSingleLine = true;
+      // Only set processedSingleLine if we found clauses on the same line
+      // This allows multi-line queries to work correctly
+      if (tokens.from || tokens.where || tokens.sort || tokens.groupBy || tokens.flatten || tokens.limit) {
+        processedSingleLine = true;
+      }
     }
     // TASK query
     else if (upperLine.startsWith('TASK')) {
@@ -248,9 +262,12 @@ export function parseDataviewQuery(query: string): ParsedQuery {
         if (tokens.limit) {
           limit = parseInt(tokens.limit, 10);
         }
-      }
 
-      processedSingleLine = true;
+        // Only set processedSingleLine if we found clauses on the same line
+        if (tokens.from || tokens.where || tokens.limit) {
+          processedSingleLine = true;
+        }
+      }
     }
     // FROM clause (standalone line) - only process if not single-line query
     else if (upperLine.startsWith('FROM ') && !processedSingleLine) {

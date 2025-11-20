@@ -223,7 +223,7 @@ describe('Phase 4: Query Parser and FLATTEN', () => {
     expect(parsed.fields).toEqual(['file.name', 'status']);
     expect(parsed.from?.type).toBe('simple');
     expect(parsed.where).toBe('rating > 3');
-    expect(parsed.sort).toEqual({ field: 'created', direction: 'DESC' });
+    expect(parsed.sort).toEqual([{ field: 'created', direction: 'DESC' }]);
     expect(parsed.limit).toBe(10);
   });
 
@@ -329,7 +329,7 @@ describe('Integration: End-to-End Query Processing', () => {
     expect(parsed.from?.operator).toBe('OR');
     expect(parsed.where).toBe('status = "active" AND rating > 3');
     expect(parsed.groupBy).toEqual(['category']);
-    expect(parsed.sort).toEqual({ field: 'avg_rating', direction: 'DESC' });
+    expect(parsed.sort).toEqual([{ field: 'avg_rating', direction: 'DESC' }]);
     expect(parsed.limit).toBe(5);
   });
 });
@@ -354,7 +354,7 @@ describe('Single-Line Query Parsing (Fix Verification)', () => {
     expect(parsed.fields).toEqual(['status', 'priority']);
     expect(parsed.from?.type).toBe('simple');
     expect(parsed.from?.source).toBe('"Testing"');
-    expect(parsed.sort).toEqual({ field: 'priority', direction: 'DESC' });
+    expect(parsed.sort).toEqual([{ field: 'priority', direction: 'DESC' }]);
   });
 
   it('should correctly parse LIMIT clause in single-line query', () => {
@@ -377,7 +377,7 @@ describe('Single-Line Query Parsing (Fix Verification)', () => {
     expect(parsed.from?.type).toBe('simple');
     expect(parsed.from?.source).toBe('"Testing"');
     expect(parsed.where).toBe('status != "archived"');
-    expect(parsed.sort).toEqual({ field: 'priority', direction: 'DESC' });
+    expect(parsed.sort).toEqual([{ field: 'priority', direction: 'DESC' }]);
     expect(parsed.limit).toBe(5);
   });
 
